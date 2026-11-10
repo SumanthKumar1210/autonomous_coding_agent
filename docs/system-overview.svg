@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="800" viewBox="0 0 1440 800" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#424a53"/></marker></defs>
+<rect width="1440" height="800" fill="#ffffff"/>
+<text x="40" y="44" font-size="24" font-weight="700" fill="#1f2328">AutoForge — System Overview</text>
+<text x="40" y="68" font-size="14" fill="#57606a">From ticket to reviewed pull request: AI writes the code, a human always makes the final call.</text>
+<rect x="40" y="150" width="200" height="130" rx="12" fill="#fbefff" stroke="#8250df" stroke-width="2"/>
+<circle cx="62" cy="172" r="13" fill="#8250df"/>
+<text x="62" y="177" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<text x="140.0" y="212" font-size="16" font-weight="700" fill="#1f2328" text-anchor="middle">Engineer</text>
+<text x="140.0" y="232" font-size="12.5" fill="#424a53" text-anchor="middle">writes a ticket</text>
+<text x="140.0" y="252" font-size="12.5" fill="#424a53" text-anchor="middle">GitHub Issue + label</text>
+<rect x="290" y="104" width="760" height="300" rx="18" fill="#f6faff" stroke="#0969da" stroke-width="2.5"/>
+<text x="310" y="134" font-size="18" font-weight="800" fill="#0969da">AutoForge</text>
+<text x="412" y="134" font-size="13" fill="#57606a">agentic coding pipeline</text>
+<rect x="310" y="172" width="132" height="132" rx="12" fill="#d4f7dc" stroke="#1a7f37" stroke-width="2"/>
+<circle cx="332" cy="194" r="13" fill="#1a7f37"/>
+<text x="332" y="199" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<text x="376.0" y="234" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Understand</text>
+<text x="376.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">reads the ticket</text>
+<text x="376.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">+ repository code</text>
+<path d="M442,238 H454" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<rect x="456" y="172" width="132" height="132" rx="12" fill="#d4f7dc" stroke="#1a7f37" stroke-width="2"/>
+<circle cx="478" cy="194" r="13" fill="#1a7f37"/>
+<text x="478" y="199" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+<text x="522.0" y="234" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Write code</text>
+<text x="522.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">Coder agent</text>
+<text x="522.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">(LLM)</text>
+<path d="M588,238 H600" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<rect x="602" y="172" width="132" height="132" rx="12" fill="#fff4cc" stroke="#bf8700" stroke-width="2"/>
+<circle cx="624" cy="194" r="13" fill="#bf8700"/>
+<text x="624" y="199" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">4</text>
+<text x="668.0" y="234" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Review</text>
+<text x="668.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">Reviewer agent</text>
+<text x="668.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">sends fixes back</text>
+<rect x="682" y="178" width="46" height="18" rx="9" fill="#fff4cc" stroke="#bf8700"/>
+<text x="705.0" y="191" font-size="10" font-weight="700" fill="#57606a" text-anchor="middle">NEXT</text>
+<path d="M734,238 H746" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<rect x="748" y="172" width="132" height="132" rx="12" fill="#d4f7dc" stroke="#1a7f37" stroke-width="2"/>
+<circle cx="770" cy="194" r="13" fill="#1a7f37"/>
+<text x="770" y="199" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">5</text>
+<text x="814.0" y="234" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Safety checks</text>
+<text x="814.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">blocks unsafe or</text>
+<text x="814.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">out-of-scope edits</text>
+<path d="M880,238 H892" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<rect x="894" y="172" width="132" height="132" rx="12" fill="#f3f4f6" stroke="#8c959f" stroke-width="2" stroke-dasharray="6 4"/>
+<circle cx="916" cy="194" r="13" fill="#8c959f"/>
+<text x="916" y="199" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">6</text>
+<text x="960.0" y="234" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Verify</text>
+<text x="960.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">lint &amp; tests</text>
+<text x="960.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">in a sandbox</text>
+<rect x="950" y="178" width="70" height="18" rx="9" fill="#f3f4f6" stroke="#8c959f"/>
+<text x="985.0" y="191" font-size="10" font-weight="700" fill="#57606a" text-anchor="middle">PLANNED</text>
+<path d="M668,172 V152 H522 V170" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<text x="595" y="147" font-size="12" font-style="italic" fill="#57606a" text-anchor="middle">fixes</text>
+<rect x="640" y="322" width="386" height="66" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+<text x="833" y="343" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">Every run is traceable</text>
+<text x="833" y="362" font-size="12" fill="#424a53" text-anchor="middle">run ID in logs, PR and ticket · token cost per run</text>
+<text x="833" y="379" font-size="12" fill="#424a53" text-anchor="middle">failures reported back on the ticket</text>
+<rect x="402" y="452" width="240" height="76" rx="12" fill="#ddf4ff" stroke="#0969da" stroke-width="2"/>
+<text x="522.0" y="486" font-size="16" font-weight="700" fill="#1f2328" text-anchor="middle">OpenAI LLM</text>
+<text x="522.0" y="506" font-size="12.5" fill="#424a53" text-anchor="middle">structured output (JSON)</text>
+<path d="M500,304 V450" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<text x="492" y="430" font-size="12" font-style="italic" fill="#57606a" text-anchor="end">prompt</text>
+<path d="M544,452 V306" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<text x="552" y="430" font-size="12" font-style="italic" fill="#57606a" text-anchor="start">code change</text>
+<rect x="1100" y="150" width="140" height="130" rx="12" fill="#d4f7dc" stroke="#1a7f37" stroke-width="2"/>
+<circle cx="1122" cy="172" r="13" fill="#1a7f37"/>
+<text x="1122" y="177" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">7</text>
+<text x="1170.0" y="212" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Pull request</text>
+<text x="1170.0" y="232" font-size="12.5" fill="#424a53" text-anchor="middle">branch + commit</text>
+<text x="1170.0" y="252" font-size="12.5" fill="#424a53" text-anchor="middle">“Closes #N”</text>
+<rect x="1280" y="150" width="130" height="130" rx="12" fill="#fbefff" stroke="#8250df" stroke-width="2"/>
+<circle cx="1302" cy="172" r="13" fill="#8250df"/>
+<text x="1302" y="177" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">8</text>
+<text x="1345.0" y="212" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Engineer</text>
+<text x="1345.0" y="232" font-size="12.5" fill="#424a53" text-anchor="middle">reviews &amp;</text>
+<text x="1345.0" y="252" font-size="12.5" fill="#424a53" text-anchor="middle">merges</text>
+<rect x="1262" y="296" width="166" height="46" rx="8" fill="#fff8f0" stroke="#d1242f" stroke-width="1.4"/>
+<text x="1345" y="315" font-size="12" font-weight="700" fill="#d1242f" text-anchor="middle">Human-in-the-loop</text>
+<text x="1345" y="332" font-size="11.5" fill="#57606a" text-anchor="middle">AutoForge can never merge</text>
+<path d="M240,215 H288" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<text x="264" y="207" font-size="12" font-style="italic" fill="#57606a" text-anchor="middle">label</text>
+<path d="M1050,215 H1098" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<path d="M1240,215 H1278" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<path d="M1170,280 V570 H140 V282" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<text x="655" y="562" font-size="12" font-style="italic" fill="#57606a" text-anchor="middle">comments the PR link and status label back on the ticket</text>
+<rect x="40" y="606" width="1370" height="160" rx="16" fill="#f6f8fa" stroke="#d0d7de"/>
+<text x="60" y="636" font-size="15" font-weight="700" fill="#1f2328">Roadmap — one platform across the ASPICE V-model</text>
+<polygon points="60,656 353,656 375,702.0 353,748 60,748" fill="#d4f7dc" stroke="#1a7f37" stroke-width="2"/>
+<text x="217.5" y="688" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="middle">Phase 1 · Coding agent</text>
+<text x="217.5" y="708" font-size="12" fill="#424a53" text-anchor="middle">Software construction (SWE.3)</text>
+<text x="217.5" y="728" font-size="12" font-weight="700" fill="#1a7f37" text-anchor="middle">In progress</text>
+<polygon points="395,656 688,656 710,702.0 688,748 395,748 417,702.0" fill="#f3f4f6" stroke="#8c959f" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="558.5" y="688" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="middle">Phase 2 · Unit tests &amp; MISRA C</text>
+<text x="558.5" y="708" font-size="12" fill="#424a53" text-anchor="middle">Unit verification (SWE.4)</text>
+<text x="558.5" y="728" font-size="12" font-weight="700" fill="#8c959f" text-anchor="middle">Planned</text>
+<polygon points="730,656 1023,656 1045,702.0 1023,748 730,748 752,702.0" fill="#f3f4f6" stroke="#8c959f" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="893.5" y="688" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="middle">Phase 3 · Requirements &amp; Polarion</text>
+<text x="893.5" y="708" font-size="12" fill="#424a53" text-anchor="middle">Requirements + traceability (SYS.2/SWE.1)</text>
+<text x="893.5" y="728" font-size="12" font-weight="700" fill="#8c959f" text-anchor="middle">Planned</text>
+<polygon points="1065,656 1358,656 1380,702.0 1358,748 1065,748 1087,702.0" fill="#f3f4f6" stroke="#8c959f" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="1228.5" y="688" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="middle">Phase 4 · HIL/SIL testing</text>
+<text x="1228.5" y="708" font-size="12" fill="#424a53" text-anchor="middle">Integration &amp; system tests (SWE.5-6, SYS.4)</text>
+<text x="1228.5" y="728" font-size="12" font-weight="700" fill="#8c959f" text-anchor="middle">Planned</text>
+</svg>
