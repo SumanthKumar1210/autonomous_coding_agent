@@ -1,3 +1,5 @@
+"""Tests for domain.policy: the safety rules every agent change must pass."""
+
 from __future__ import annotations
 
 import pytest
@@ -15,20 +17,24 @@ SNAPSHOT = RepoSnapshot(
 
 
 def _change(*files: FileChange) -> CodeChange:
+    """Build a CodeChange containing the given file operations."""
     return CodeChange(summary="s", commit_message="m", pr_title="t", pr_body="b", files=list(files))
 
 
 def _f(path: str, action: str = "create", content: str = "x = 1") -> FileChange:
+    """Build one FileChange (defaults: create with non-empty content)."""
     return FileChange(path=path, action=action, content=content)  # type: ignore[arg-type]
 
 
 def test_valid_change_passes() -> None:
+    """A well-formed create/modify/delete change passes validation."""
     validate_change(_change(_f("src/new.py"), _f("src/app.py", "modify"), _f("big/data.bin", "delete", "")), SNAPSHOT)
 
 
 @pytest.mark.parametrize("path", ["/etc/passwd", "../x.py", "src/../../x.py", "./a.py", "a\\b.py", "",
                                   ".git/config", ".github/workflows/ci.yml", "src//a.py"])
 def test_rejects_unsafe_paths(path: str) -> None:
+    """Absolute, escaping, malformed and forbidden (.git, CI) paths are rejected."""
     with pytest.raises(ChangeValidationError):
         validate_change(_change(_f(path)), SNAPSHOT)
 
@@ -42,15 +48,18 @@ def test_rejects_unsafe_paths(path: str) -> None:
     _change(_f("a.py", content="   ")),            # empty
 ])
 def test_rejects_invalid_actions(change: CodeChange) -> None:
+    """Empty, duplicate, blind-modify, create-existing and delete-missing changes are rejected."""
     with pytest.raises(ChangeValidationError):
         validate_change(change, SNAPSHOT)
 
 
 @pytest.mark.parametrize("branch", ["main", "feature/x", "release"])
 def test_only_agent_branches_are_writable(branch: str) -> None:
+    """Writing to the default branch or any non-agent branch raises SafetyError."""
     with pytest.raises(SafetyError):
         assert_writable_branch(branch, BASE, required_prefix="autoforge/")
 
 
 def test_agent_branch_is_writable() -> None:
+    """Writing to an autoforge/* branch is allowed."""
     assert_writable_branch("autoforge/issue-1", BASE, required_prefix="autoforge/")

@@ -1,10 +1,20 @@
-"""Prompt templates, kept separate from LLM plumbing so they can be versioned and evaluated."""
+"""Prompt templates for the agents.
+
+Kept separate from the OpenAI plumbing in ``coder.py`` so prompts can be read,
+reviewed, versioned and (later) evaluated on their own.
+
+Security note: ticket text and repository files are wrapped in ``<ticket>`` and
+``<repository>`` tags, and the system prompt tells the model to treat
+everything inside them as data, not instructions. This is the first line of
+defence against prompt injection; ``domain.policy`` is the second.
+"""
 
 from __future__ import annotations
 
 from autoforge.domain.models import RepoSnapshot, Ticket
 
 MAX_TREE_PATHS = 2000
+"""Cap on how many file paths are listed in the prompt (protects the context window)."""
 
 CODER_SYSTEM_PROMPT = """\
 You are AutoForge, a senior software engineer working on automotive embedded \
@@ -36,9 +46,25 @@ your assumptions in pr_body.
 verify, and Assumptions & open questions. Do not add issue-closing keywords; \
 the system adds those.
 """
+"""System prompt ("instructions") for the coder agent: role, safety rules, output rules."""
 
 
 def build_coder_input(ticket: Ticket, snapshot: RepoSnapshot) -> str:
+    """Build the user message for the coder agent.
+
+    The message has two tagged sections:
+
+    - ``<ticket>``: title, labels, description and comments;
+    - ``<repository>``: the full file tree (capped at ``MAX_TREE_PATHS``) and
+      the content of the files selected by ``agents.context``.
+
+    Args:
+        ticket: The ticket to implement.
+        snapshot: The repository context for this run.
+
+    Returns:
+        The complete input text sent to the model.
+    """
     comments = "\n\n".join(f"<comment>\n{c}\n</comment>" for c in ticket.comments if c.strip())
     tree_paths = sorted(snapshot.modes)
     tree = "\n".join(tree_paths[:MAX_TREE_PATHS])

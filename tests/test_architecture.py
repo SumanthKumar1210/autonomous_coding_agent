@@ -21,11 +21,13 @@ FORBIDDEN: dict[str, tuple[str, ...]] = {
 
 
 def _layer(path: Path) -> str:
+    """Return the layer name (first path component) of a module inside the package."""
     rel = path.relative_to(PKG)
     return rel.parts[0].removesuffix(".py")
 
 
 def _imports(path: Path) -> list[str]:
+    """Return every module name imported by a Python file (parsed with ast, not executed)."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     names: list[str] = []
     for node in ast.walk(tree):
@@ -41,6 +43,7 @@ MODULES = sorted(p for p in PKG.rglob("*.py") if _layer(p) in FORBIDDEN)
 
 @pytest.mark.parametrize("module", MODULES, ids=lambda p: str(p.relative_to(PKG)))
 def test_layer_dependencies(module: Path) -> None:
+    """No module imports a layer it is not allowed to depend on."""
     forbidden = FORBIDDEN[_layer(module)]
     violations = [name for name in _imports(module) if any(name == f or name.startswith(f + ".") for f in forbidden)]
     assert not violations, f"{module.relative_to(PKG)} imports {violations}"

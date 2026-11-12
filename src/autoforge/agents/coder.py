@@ -1,4 +1,10 @@
-"""Coder agent backed by OpenAI structured outputs (Responses API)."""
+"""Coder agent backed by OpenAI structured outputs (Responses API).
+
+"Structured outputs" means OpenAI is given the JSON schema of ``CodeChange``
+and must answer with JSON matching it exactly. The SDK's
+``responses.parse(text_format=CodeChange)`` then returns a validated
+``CodeChange`` object, so there is no fragile text parsing.
+"""
 
 from __future__ import annotations
 
@@ -14,14 +20,45 @@ log = logging.getLogger(__name__)
 
 
 class OpenAICoder:
-    """Implements `ports.Coder`."""
+    """Coder agent that asks an OpenAI model for a ``CodeChange``.
+
+    Implements the ``ports.Coder`` interface.
+
+    Example::
+
+        coder = OpenAICoder(OpenAI(api_key=...), "gpt-6-luna")
+        result = coder.generate(ticket, snapshot)
+        result.change.files   # -> list of FileChange
+    """
 
     def __init__(self, client: OpenAI, model: str, *, max_output_tokens: int = 32_000) -> None:
+        """Create the agent.
+
+        Args:
+            client: Configured OpenAI SDK client (API key, timeout).
+            model: Model ID, e.g. ``"gpt-6-luna"`` (from ``OPENAI_MODEL``).
+            max_output_tokens: Upper bound on generated tokens; if the model hits
+                it, the run fails with ``AgentError`` rather than using a
+                half-written change.
+        """
         self._client = client
         self._model = model
         self._max_output_tokens = max_output_tokens
 
     def generate(self, ticket: Ticket, snapshot: RepoSnapshot) -> CoderResult:
+        """Ask the model to implement ``ticket`` and return its structured change.
+
+        Args:
+            ticket: The ticket to implement.
+            snapshot: Repository context (tree + selected file contents).
+
+        Returns:
+            The parsed ``CodeChange`` plus token usage and model ID.
+
+        Raises:
+            AgentError: If the response was truncated (``status == "incomplete"``),
+                or the model refused / returned no parseable output.
+        """
         response = self._client.responses.parse(
             model=self._model,
             instructions=CODER_SYSTEM_PROMPT,
@@ -46,6 +83,11 @@ class OpenAICoder:
 
 
 def _refusal_text(response: object) -> str:
+    """Extract the model's refusal message from a response, if it gave one.
+
+    Used only to make the error posted on the ticket more informative.
+    Returns at most 300 characters, or ``"no refusal text"``.
+    """
     for item in getattr(response, "output", []) or []:
         for content in getattr(item, "content", []) or []:
             if getattr(content, "type", None) == "refusal":

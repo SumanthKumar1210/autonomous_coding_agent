@@ -15,7 +15,13 @@ REPO = "acme/sandbox"
 
 
 class FakeGitHub:
+    """In-memory GitHub: holds files, refs, issues, labels and PRs, and answers REST calls like GitHub would.
+
+    Tests set up state (``add_issue``, ``refs``, ``fail``), run the workflow, then
+    inspect what AutoForge did (``pulls``, ``comments``, ``labels``, ``calls`` ...).
+    """
     def __init__(self, files: dict[str, str] | None = None) -> None:
+        """Create a fake repo with ``files`` (path -> content) on branch ``main``."""
         self.files = files if files is not None else {"README.md": "# Sandbox\n", "src/app.py": "print('hi')\n"}
         self.blobs = {f"blob-{p}": c.encode() for p, c in self.files.items()}
         self.refs: dict[str, str] = {"main": "commit-base"}
@@ -29,16 +35,23 @@ class FakeGitHub:
         self.fail: dict[tuple[str, str], int] = {}  # (method, path-regex) -> status to return
 
     def add_issue(self, number: int, title: str = "Add feature", body: str = "Please add it", **extra: Any) -> None:
+        """Create open issue ``number``; ``extra`` adds/overrides fields (e.g. ``pull_request=...``)."""
         self.issues[number] = {"number": number, "title": title, "body": body, "state": "open",
                                "html_url": f"https://github.com/{REPO}/issues/{number}", "labels": [], **extra}
         self.comments[number] = []
         self.labels[number] = []
 
     def client(self) -> GitHubClient:
+        """Return a real ``GitHubClient`` wired to this fake (no network, no retry delays)."""
         return GitHubClient("test-token", REPO, transport=httpx.MockTransport(self.handle), sleep=lambda _: None)
 
     # ------------------------------------------------------------------
     def handle(self, request: httpx.Request) -> httpx.Response:
+        """Answer one HTTP request the way GitHub would (the MockTransport handler).
+
+        Entries in ``self.fail`` force an error status for matching requests.
+        Any attempt to merge a PR fails the test immediately.
+        """
         method = request.method
         path = request.url.path.removeprefix(f"/repos/{REPO}")
         self.calls.append((method, path))
@@ -48,6 +61,7 @@ class FakeGitHub:
         body = json.loads(request.content) if request.content else {}
 
         def ok(data: Any, status: int = 200) -> httpx.Response:
+            """Shortcut for a JSON response with the given status."""
             return httpx.Response(status, json=data)
 
         if method == "GET" and path == "":

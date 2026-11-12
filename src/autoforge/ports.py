@@ -1,8 +1,17 @@
 """Ports: the interfaces the workflow depends on. Integrations implement them.
 
-The workflow never imports an integration directly; `app/wiring.py` plugs
-concrete implementations in. This keeps the core testable and lets Jira (or
-another git host) be added without touching agents or workflow.
+"Ports and adapters" in one sentence: the workflow says *what* it needs
+(e.g. "get me the ticket", "open a PR") through these interfaces, and adapters
+in ``integrations/`` and ``agents/`` say *how* (GitHub REST calls, OpenAI calls).
+
+Benefits:
+
+- the workflow never imports GitHub or OpenAI code, so it is testable with fakes;
+- adding Jira means writing one new ``TicketSource`` - nothing else changes;
+- the wiring of concrete classes happens in exactly one place: ``app/wiring.py``.
+
+These are ``typing.Protocol`` classes: any object with matching methods
+qualifies, no inheritance needed.
 """
 
 from __future__ import annotations
@@ -22,27 +31,83 @@ from autoforge.domain.models import (
 
 
 class TicketSource(Protocol):
-    """Where work comes from and where progress is reported (GitHub Issues; Jira later)."""
+    """Where work comes from and where progress is reported.
 
-    def get_ticket(self, key: str) -> Ticket: ...
-    def comment(self, key: str, body: str) -> None: ...
-    def set_status(self, key: str, status: TicketStatus) -> None: ...
+    Implemented by ``GitHubIssuesSource`` today; a Jira implementation can be
+    added later.
+    """
+
+    def get_ticket(self, key: str) -> Ticket:
+        """Load a ticket by its key.
+
+        Raises:
+            TicketError: If the ticket cannot be worked on (missing, closed, ...).
+        """
+        ...
+
+    def comment(self, key: str, body: str) -> None:
+        """Post a comment (Markdown) on the ticket."""
+        ...
+
+    def set_status(self, key: str, status: TicketStatus) -> None:
+        """Mark the ticket with a progress status (replacing any previous one)."""
+        ...
 
 
 class RepoHost(Protocol):
-    """The target code repository. Deliberately has no merge/approve operation: PR-only."""
+    """The target code repository (e.g. a GitHub repo).
+
+    Deliberately has **no merge or approve operation**: AutoForge can open pull
+    requests, but only a human can merge them.
+    """
 
     @property
-    def name(self) -> str: ...
-    def get_base(self) -> BaseRef: ...
-    def list_files(self, base: BaseRef) -> list[RepoFile]: ...
-    def read_file(self, file: RepoFile) -> bytes: ...
-    def find_open_pull(self, branch: str) -> PullRequest | None: ...
-    def publish(self, snapshot: RepoSnapshot, branch: str, change: CodeChange) -> str: ...
-    def open_pull(self, *, title: str, body: str, head: str, base: str) -> PullRequest: ...
+    def name(self) -> str:
+        """Human-readable repository name, e.g. ``"owner/repo"`` (for logs)."""
+        ...
+
+    def get_base(self) -> BaseRef:
+        """Return the current head commit of the default branch."""
+        ...
+
+    def list_files(self, base: BaseRef) -> list[RepoFile]:
+        """List every file in the repository at ``base`` (metadata only)."""
+        ...
+
+    def read_file(self, file: RepoFile) -> bytes:
+        """Download one file's raw content."""
+        ...
+
+    def find_open_pull(self, branch: str) -> PullRequest | None:
+        """Return the open PR whose head is ``branch``, or ``None``."""
+        ...
+
+    def publish(self, snapshot: RepoSnapshot, branch: str, change: CodeChange) -> str:
+        """Commit ``change`` on top of the snapshot's base and point ``branch`` at it.
+
+        Returns:
+            The new commit SHA.
+
+        Raises:
+            SafetyError: If ``branch`` is not an agent-owned branch.
+        """
+        ...
+
+    def open_pull(self, *, title: str, body: str, head: str, base: str) -> PullRequest:
+        """Open a pull request from ``head`` into ``base``."""
+        ...
 
 
 class Coder(Protocol):
-    """Agent that turns a ticket + repository snapshot into a code change."""
+    """An agent that turns a ticket + repository snapshot into a code change.
 
-    def generate(self, ticket: Ticket, snapshot: RepoSnapshot) -> CoderResult: ...
+    Implemented by ``OpenAICoder``; tests use a ``FakeCoder``.
+    """
+
+    def generate(self, ticket: Ticket, snapshot: RepoSnapshot) -> CoderResult:
+        """Produce a code change for ``ticket``.
+
+        Raises:
+            AgentError: If the model refuses, is truncated, or returns nothing usable.
+        """
+        ...

@@ -1,4 +1,9 @@
-"""Runtime configuration, loaded from environment variables / `.env`."""
+"""Runtime configuration, loaded from environment variables or a ``.env`` file.
+
+Each field below maps to an upper-case environment variable of the same name,
+e.g. ``openai_model`` <- ``OPENAI_MODEL``. Real environment variables take
+precedence over ``.env``. See ``.env.example`` for a template.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,29 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """All AutoForge settings, validated on load.
+
+    Missing required values (API key, model, token, repo) raise a
+    ``ValidationError``, which the CLI turns into a clear configuration error.
+    Secrets are ``SecretStr``: they print as ``**********`` and must be read
+    explicitly with ``.get_secret_value()``.
+
+    Attributes:
+        openai_api_key: OpenAI API key (``OPENAI_API_KEY``). Required, secret.
+        openai_model: Model ID for the coder agent, e.g. ``"gpt-6-luna"``. Required.
+        openai_max_output_tokens: Upper bound on tokens the model may generate.
+        openai_timeout_seconds: Timeout for one OpenAI call.
+        github_token: Fine-grained GitHub token for the target repo. Required, secret.
+        github_repo: Target repository as ``"owner/repo"``. Required.
+        github_api_url: GitHub API root (change only for GitHub Enterprise).
+        http_timeout_seconds: Timeout for one GitHub API call.
+        trigger_label: Label that marks issues for AutoForge; also the status-label prefix.
+        branch_prefix: Prefix of agent branches (``autoforge/issue-N``).
+        max_context_bytes: Total file-content budget sent to the LLM per run.
+        max_file_bytes: Largest single file sent to the LLM.
+        log_level: Minimum log level (``DEBUG``, ``INFO``, ``WARNING`` ...).
+    """
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # LLM
