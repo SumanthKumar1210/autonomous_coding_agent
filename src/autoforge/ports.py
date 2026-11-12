@@ -25,6 +25,8 @@ from autoforge.domain.models import (
     PullRequest,
     RepoFile,
     RepoSnapshot,
+    ReviewerResult,
+    Revision,
     Ticket,
     TicketStatus,
 )
@@ -104,8 +106,31 @@ class Coder(Protocol):
     Implemented by ``OpenAICoder``; tests use a ``FakeCoder``.
     """
 
-    def generate(self, ticket: Ticket, snapshot: RepoSnapshot) -> CoderResult:
+    def generate(self, ticket: Ticket, snapshot: RepoSnapshot, revision: Revision | None = None) -> CoderResult:
         """Produce a code change for ``ticket``.
+
+        Args:
+            ticket: The ticket to implement.
+            snapshot: Repository context.
+            revision: ``None`` on the first attempt. On later attempts, the
+                previous change and the feedback (reviewer findings or a policy
+                error) the new change must address.
+
+        Raises:
+            AgentError: If the model refuses, is truncated, or returns nothing usable.
+        """
+        ...
+
+
+class Reviewer(Protocol):
+    """An agent that checks a proposed change against the ticket and the repository.
+
+    Implemented by ``OpenAIReviewer``; tests use a ``FakeReviewer``. The
+    reviewer only judges; it never edits the change itself.
+    """
+
+    def review(self, ticket: Ticket, snapshot: RepoSnapshot, change: CodeChange) -> ReviewerResult:
+        """Return an approve / reject verdict with findings for ``change``.
 
         Raises:
             AgentError: If the model refuses, is truncated, or returns nothing usable.

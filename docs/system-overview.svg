@@ -26,21 +26,19 @@
 <text x="522.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">Coder agent</text>
 <text x="522.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">(LLM)</text>
 <path d="M588,238 H600" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
-<rect x="602" y="172" width="132" height="132" rx="12" fill="#fff4cc" stroke="#bf8700" stroke-width="2"/>
-<circle cx="624" cy="194" r="13" fill="#bf8700"/>
+<rect x="602" y="172" width="132" height="132" rx="12" fill="#d4f7dc" stroke="#1a7f37" stroke-width="2"/>
+<circle cx="624" cy="194" r="13" fill="#1a7f37"/>
 <text x="624" y="199" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">4</text>
-<text x="668.0" y="234" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Review</text>
-<text x="668.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">Reviewer agent</text>
-<text x="668.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">sends fixes back</text>
-<rect x="682" y="178" width="46" height="18" rx="9" fill="#fff4cc" stroke="#bf8700"/>
-<text x="705.0" y="191" font-size="10" font-weight="700" fill="#57606a" text-anchor="middle">NEXT</text>
+<text x="668.0" y="234" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Safety checks</text>
+<text x="668.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">blocks unsafe or</text>
+<text x="668.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">out-of-scope edits</text>
 <path d="M734,238 H746" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
 <rect x="748" y="172" width="132" height="132" rx="12" fill="#d4f7dc" stroke="#1a7f37" stroke-width="2"/>
 <circle cx="770" cy="194" r="13" fill="#1a7f37"/>
 <text x="770" y="199" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">5</text>
-<text x="814.0" y="234" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Safety checks</text>
-<text x="814.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">blocks unsafe or</text>
-<text x="814.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">out-of-scope edits</text>
+<text x="814.0" y="234" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Review</text>
+<text x="814.0" y="254" font-size="12.5" fill="#424a53" text-anchor="middle">Reviewer agent</text>
+<text x="814.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">sends fixes back</text>
 <path d="M880,238 H892" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
 <rect x="894" y="172" width="132" height="132" rx="12" fill="#f3f4f6" stroke="#8c959f" stroke-width="2" stroke-dasharray="6 4"/>
 <circle cx="916" cy="194" r="13" fill="#8c959f"/>
@@ -50,8 +48,8 @@
 <text x="960.0" y="274" font-size="12.5" fill="#424a53" text-anchor="middle">in a sandbox</text>
 <rect x="950" y="178" width="70" height="18" rx="9" fill="#f3f4f6" stroke="#8c959f"/>
 <text x="985.0" y="191" font-size="10" font-weight="700" fill="#57606a" text-anchor="middle">PLANNED</text>
-<path d="M668,172 V152 H522 V170" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
-<text x="595" y="147" font-size="12" font-style="italic" fill="#57606a" text-anchor="middle">fixes</text>
+<path d="M814,172 V152 H522 V170" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
+<text x="668" y="147" font-size="12" font-style="italic" fill="#57606a" text-anchor="middle">fixes (bounded loop)</text>
 <rect x="640" y="322" width="386" height="66" rx="10" fill="#ffffff" stroke="#d0d7de"/>
 <text x="833" y="343" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">Every run is traceable</text>
 <text x="833" y="362" font-size="12" fill="#424a53" text-anchor="middle">run ID in logs, PR and ticket · token cost per run</text>
@@ -68,7 +66,7 @@
 <text x="1122" y="177" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">7</text>
 <text x="1170.0" y="212" font-size="15" font-weight="700" fill="#1f2328" text-anchor="middle">Pull request</text>
 <text x="1170.0" y="232" font-size="12.5" fill="#424a53" text-anchor="middle">branch + commit</text>
-<text x="1170.0" y="252" font-size="12.5" fill="#424a53" text-anchor="middle">“Closes #N”</text>
+<text x="1170.0" y="252" font-size="12.5" fill="#424a53" text-anchor="middle">+ review outcome</text>
 <rect x="1280" y="150" width="130" height="130" rx="12" fill="#fbefff" stroke="#8250df" stroke-width="2"/>
 <circle cx="1302" cy="172" r="13" fill="#8250df"/>
 <text x="1302" y="177" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">8</text>

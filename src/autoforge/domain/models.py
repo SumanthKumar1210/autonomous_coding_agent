@@ -1,12 +1,14 @@
 """Core data models shared across all layers.
 
-There are three groups of models:
+There are four groups of models:
 
 1. **Tickets** - the unit of work and its status.
 2. **Repository** - what AutoForge knows about the target repo for one run.
-3. **Agent output** - the structured change the LLM coder returns. These are
-   pydantic models because their JSON schema is sent to OpenAI as the required
-   response format ("structured outputs").
+3. **Agent output** - the structured change the coder returns and the verdict
+   the reviewer returns. These are pydantic models because their JSON schema is
+   sent to OpenAI as the required response format ("structured outputs").
+4. **Agent bookkeeping** - token usage, results, and the revision feedback that
+   goes from the reviewer back to the coder.
 
 Plain ``dataclass(frozen=True)`` is used for everything else: immutable,
 simple, and no validation overhead where none is needed.
@@ -54,6 +56,7 @@ class TicketStatus(str, Enum):
     """
 
     IN_PROGRESS = "in-progress"
+    AWAITING_APPROVAL = "awaiting-approval"
     PR_OPENED = "pr-opened"
     FAILED = "failed"
 
@@ -169,17 +172,60 @@ class CodeChange(BaseModel):
     files: list[FileChange]
 
 
+# ReviewFinding / ReviewVerdict: the reviewer agent's structured output. The
+# reviewer's own `approved` flag is not trusted alone: `ReviewVerdict.passed`
+# also requires that no blocker or major finding is listed.
+
+
+class ReviewFinding(BaseModel):
+    """One problem found in the proposed change."""
+
+    severity: Literal["blocker", "major", "minor"] = Field(
+        description="blocker: wrong, unsafe or misses an acceptance criterion; major: must fix before merge; "
+                    "minor: optional improvement."
+    )
+    path: str = Field(description="File the finding is about, or empty string if it concerns the change as a whole.")
+    message: str = Field(description="What is wrong and what the fix should be, specific enough to act on.")
+
+
+class ReviewVerdict(BaseModel):
+    """The reviewer's decision on the proposed change."""
+
+    approved: bool = Field(description="True only if the change can be merged as is (no blocker or major findings).")
+    summary: str = Field(description="One-paragraph assessment of the change.")
+    findings: list[ReviewFinding]
+
+    @property
+    def passed(self) -> bool:
+        """True if the reviewer approved *and* listed no blocker or major finding."""
+        return self.approved and not self.blocking_findings
+
+    @property
+    def blocking_findings(self) -> list[ReviewFinding]:
+        """Findings that must be fixed before the change can be published."""
+        return [f for f in self.findings if f.severity in ("blocker", "major")]
+
+
+# ----------------------------------------------------------- agent bookkeeping
+
+
 @dataclass(frozen=True)
 class TokenUsage:
-    """LLM token counts for one call, used for cost tracking.
+    """LLM token counts, used for cost tracking.
+
+    Supports ``+`` so a run can total the usage of all its LLM calls.
 
     Attributes:
         input_tokens: Tokens sent to the model (prompt + repository context).
         output_tokens: Tokens the model generated (including reasoning).
     """
 
-    input_tokens: int
-    output_tokens: int
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    def __add__(self, other: TokenUsage) -> TokenUsage:
+        """Return the element-wise sum of two usages."""
+        return TokenUsage(self.input_tokens + other.input_tokens, self.output_tokens + other.output_tokens)
 
 
 @dataclass(frozen=True)
@@ -195,3 +241,34 @@ class CoderResult:
     change: CodeChange
     usage: TokenUsage
     model: str
+
+
+@dataclass(frozen=True)
+class ReviewerResult:
+    """What a reviewer agent returns: the verdict plus bookkeeping.
+
+    Attributes:
+        verdict: Approve / reject decision with findings.
+        usage: Token usage of the LLM call.
+        model: Model ID that produced the verdict.
+    """
+
+    verdict: ReviewVerdict
+    usage: TokenUsage
+    model: str
+
+
+@dataclass(frozen=True)
+class Revision:
+    """Feedback sent back to the coder when its previous attempt was not accepted.
+
+    Produced either by the reviewer (findings) or by ``domain.policy`` (a
+    validation error), and consumed by the coder on its next attempt.
+
+    Attributes:
+        previous: The change the coder proposed last time.
+        feedback: What must be fixed, as plain text (one item per line).
+    """
+
+    previous: CodeChange
+    feedback: str

@@ -1,34 +1,42 @@
-"""One ticket run: ticket -> context -> coder -> policy -> publish -> PR -> ticket feedback.
+"""One ticket run: start or resume the agent graph, then report back on the ticket.
 
-Step by step (see ``_run``):
+``run_ticket`` (new run):
 
 1. **Idempotency check** - if an open AutoForge PR already exists for this
    ticket, stop (re-triggering must never create duplicate PRs).
 2. **Load ticket** - if that fails there is nothing to report back on, so return.
 3. Mark the ticket **in progress**.
-4. **Build context** - snapshot of the repository for the agent.
-5. **Generate** - the coder agent proposes a ``CodeChange``.
-6. **Validate** - ``domain.policy`` rejects unsafe or inconsistent changes.
-7. **Publish** - commit to ``autoforge/issue-N`` and open a pull request.
-8. **Feedback** - comment the PR link (or the error) on the ticket and set its status.
+4. Run the **agent graph** (``workflow.graph``): context -> coder <-> reviewer
+   loop -> optional human approval -> publish branch + PR.
+5. **Feedback** - comment the outcome on the ticket and set its status label.
 
-Phase 1, increment 2 replaces this linear flow with a LangGraph graph (coder
-<-> reviewer loop, checkpoints, human-in-the-loop interrupt) behind the same
-``run_ticket`` entry point.
+``resume_run`` continues a run that paused at the human approval gate
+(``REQUIRE_APPROVAL=true``), with the human's approve / reject decision.
+
+This module owns all ticket feedback; the graph owns the work. Any failure in
+the graph (agent error, policy violation, review rejection, GitHub error) is
+caught here, reported on the ticket, and returned as ``RunOutcome.FAILED``.
 """
 
 from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
-from autoforge.agents.context import build_snapshot
-from autoforge.domain.models import CoderResult, Ticket, TicketStatus
-from autoforge.domain.policy import validate_change
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Command
+
+from autoforge.domain.errors import ReviewRejectedError
+from autoforge.domain.models import TicketStatus
 from autoforge.observability import run_context
-from autoforge.ports import Coder, RepoHost, TicketSource
+from autoforge.ports import Coder, RepoHost, Reviewer, TicketSource
+from autoforge.workflow.graph import GraphSettings, RunState, build_graph, checkpoint_serializer
 
 log = logging.getLogger(__name__)
 
@@ -38,17 +46,21 @@ class RunOutcome(str, Enum):
 
     - ``PR_OPENED``: a new pull request was opened.
     - ``ALREADY_OPEN``: an AutoForge PR for this ticket was already open; nothing done.
+    - ``AWAITING_APPROVAL``: the change passed review and waits for a human (``resume_run``).
+    - ``REJECTED``: a human rejected the change at the approval gate; no PR.
     - ``FAILED``: the run failed; the reason is in ``RunResult.error`` (and on the ticket, when possible).
     """
 
     PR_OPENED = "pr_opened"
     ALREADY_OPEN = "already_open"
+    AWAITING_APPROVAL = "awaiting_approval"
+    REJECTED = "rejected"
     FAILED = "failed"
 
 
 @dataclass(frozen=True)
 class RunResult:
-    """Result of one ``run_ticket`` call (printed as JSON by the CLI).
+    """Result of one ``run_ticket`` / ``resume_run`` call (printed as JSON by the CLI).
 
     Attributes:
         run_id: Unique ID of this run; also appears in logs, the PR and the ticket comment.
@@ -69,13 +81,17 @@ class WorkflowConfig:
 
     Attributes:
         branch_prefix: Prefix of agent branches, e.g. ``"autoforge/"``.
-        max_context_bytes: Total size of file contents sent to the LLM.
-        max_file_bytes: Largest single file that may be sent to the LLM.
+        max_context_bytes: Total size of file contents sent to the LLMs.
+        max_file_bytes: Largest single file that may be sent to the LLMs.
+        max_attempts: Maximum coder attempts per run (first try + revisions).
+        require_approval: Pause for a human before publishing the PR.
     """
 
     branch_prefix: str = "autoforge/"
     max_context_bytes: int = 60_000
     max_file_bytes: int = 20_000
+    max_attempts: int = 3
+    require_approval: bool = False
 
 
 @dataclass(frozen=True)
@@ -86,11 +102,16 @@ class Dependencies:
         tickets: Where the ticket is read from and status is reported to.
         repo: The repository code is read from and PRs are opened on.
         coder: The agent that writes the code change.
+        reviewer: The agent that reviews the change.
+        checkpointer: Where run state is saved. Production uses SQLite so a
+            paused run survives a restart; the in-memory default suits tests.
     """
 
     tickets: TicketSource
     repo: RepoHost
     coder: Coder
+    reviewer: Reviewer
+    checkpointer: BaseCheckpointSaver = field(default_factory=lambda: InMemorySaver(serde=checkpoint_serializer()))
 
 
 def branch_for(ticket_key: str, prefix: str) -> str:
@@ -114,7 +135,7 @@ def run_ticket(key: str, deps: Dependencies, config: WorkflowConfig) -> RunResul
 
     Args:
         key: Ticket key, e.g. ``"12"`` for GitHub issue #12.
-        deps: Ticket source, repository host and coder to use.
+        deps: Ticket source, repository host, agents and checkpointer to use.
         config: Run settings.
 
     Returns:
@@ -122,76 +143,158 @@ def run_ticket(key: str, deps: Dependencies, config: WorkflowConfig) -> RunResul
     """
     run_id = uuid.uuid4().hex[:12]
     with run_context(run_id):
-        return _run(key, run_id, deps, config)
+        log.info("run started", extra={"ticket": key, "repo": deps.repo.name})
+        branch = branch_for(key, config.branch_prefix)
+
+        # Idempotency: one open agent PR per ticket. Re-triggers must not open duplicates.
+        if existing := deps.repo.find_open_pull(branch):
+            log.info("open PR already exists; skipping", extra={"pr": existing.url})
+            return RunResult(run_id, RunOutcome.ALREADY_OPEN, pr_url=existing.url)
+
+        try:
+            ticket = deps.tickets.get_ticket(key)
+        except Exception as exc:  # ticket missing/closed/unreadable: nothing to report back on
+            log.exception("could not load ticket", extra={"ticket": key})
+            return RunResult(run_id, RunOutcome.FAILED, error=f"{type(exc).__name__}: {exc}")
+
+        deps.tickets.set_status(key, TicketStatus.IN_PROGRESS)
+        initial: RunState = {"run_id": run_id, "ticket_key": key, "branch": branch, "ticket": ticket}
+        return _drive(key, run_id, deps, config, lambda graph, cfg: graph.invoke(initial, cfg))
 
 
-def _run(key: str, run_id: str, deps: Dependencies, config: WorkflowConfig) -> RunResult:
-    """Execute the run steps described in the module docstring.
+def resume_run(run_id: str, approved: bool, deps: Dependencies, config: WorkflowConfig) -> RunResult:
+    """Continue a run paused at the human approval gate.
 
-    Separated from ``run_ticket`` so that every log line here carries the run ID.
+    Args:
+        run_id: The run ID printed when the run paused (also on the ticket).
+        approved: ``True`` publishes the PR; ``False`` discards the change.
+        deps: Must use the same checkpointer (database) as the paused run.
+        config: Run settings.
+
+    Returns:
+        ``PR_OPENED`` / ``REJECTED`` on success, or ``FAILED`` if the run is
+        unknown, not paused, or publishing failed.
     """
-    log.info("run started", extra={"ticket": key, "repo": deps.repo.name})
-    branch = branch_for(key, config.branch_prefix)
+    with run_context(run_id):
+        graph = _graph(deps, config)
+        snapshot = graph.get_state(_thread(run_id))
+        if not snapshot.values:
+            return RunResult(run_id, RunOutcome.FAILED, error=f"Unknown run id: {run_id}")
+        if "approve" not in snapshot.next:
+            return RunResult(run_id, RunOutcome.FAILED, error=f"Run {run_id} is not awaiting approval")
 
-    # Idempotency: one open agent PR per ticket. Re-triggers must not open duplicates.
-    if existing := deps.repo.find_open_pull(branch):
-        log.info("open PR already exists; skipping", extra={"pr": existing.url})
-        return RunResult(run_id, RunOutcome.ALREADY_OPEN, pr_url=existing.url)
+        key = snapshot.values["ticket_key"]
+        log.info("resuming run", extra={"ticket": key, "approved": approved})
+        if approved and (existing := deps.repo.find_open_pull(snapshot.values["branch"])):
+            log.info("open PR already exists; skipping", extra={"pr": existing.url})
+            return RunResult(run_id, RunOutcome.ALREADY_OPEN, pr_url=existing.url)
+        return _drive(key, run_id, deps, config,
+                      lambda g, cfg: g.invoke(Command(resume={"approved": approved}), cfg))
 
+
+# ----------------------------------------------------------------- internals
+
+Invoker = Callable[[CompiledStateGraph, dict[str, Any]], Any]
+"""Starts or resumes the graph: ``(graph, config) -> final state``."""
+
+
+def _drive(key: str, run_id: str, deps: Dependencies, config: WorkflowConfig, invoke: Invoker) -> RunResult:
+    """Run the graph via ``invoke``, then report the outcome on the ticket.
+
+    This is the top-level error boundary: any exception from the graph is
+    logged, posted on the ticket, and returned as ``FAILED``.
+    """
+    graph = _graph(deps, config)
+    cfg = _thread(run_id)
     try:
-        ticket = deps.tickets.get_ticket(key)
-    except Exception as exc:  # ticket missing/closed/unreadable: nothing to report back on
-        log.exception("could not load ticket", extra={"ticket": key})
-        return RunResult(run_id, RunOutcome.FAILED, error=f"{type(exc).__name__}: {exc}")
-
-    deps.tickets.set_status(key, TicketStatus.IN_PROGRESS)
-    try:
-        snapshot = build_snapshot(deps.repo, max_context_bytes=config.max_context_bytes,
-                                  max_file_bytes=config.max_file_bytes)
-        result = deps.coder.generate(ticket, snapshot)
-        validate_change(result.change, snapshot)
-        commit_sha = deps.repo.publish(snapshot, branch, result.change)
-        pr = deps.repo.open_pull(
-            title=result.change.pr_title,
-            body=_pr_body(ticket, result, run_id),
-            head=branch,
-            base=snapshot.default_branch,
-        )
+        invoke(graph, cfg)
     except Exception as exc:  # top-level boundary: report every failure back on the ticket
         log.exception("run failed", extra={"ticket": key})
         message = f"{type(exc).__name__}: {exc}"
-        _safe_feedback(deps.tickets, key, TicketStatus.FAILED,
-                       f"AutoForge could not complete this ticket.\n\n```\n{message[:1000]}\n```\n\nRun ID: `{run_id}`")
+        if isinstance(exc, ReviewRejectedError):
+            comment = f"AutoForge could not complete this ticket.\n\n{str(exc)[:3000]}\n\nRun ID: `{run_id}`"
+        else:
+            comment = f"AutoForge could not complete this ticket.\n\n```\n{message[:1000]}\n```\n\nRun ID: `{run_id}`"
+        _safe_feedback(deps.tickets, key, TicketStatus.FAILED, comment)
         return RunResult(run_id, RunOutcome.FAILED, error=message)
 
-    log.info("pull request opened", extra={"pr": pr.url, "commit": commit_sha, "branch": branch,
-                                           "files": len(result.change.files)})
+    final = graph.get_state(cfg)
+    state: RunState = final.values  # type: ignore[assignment]
+
+    if "approve" in final.next:  # paused at the human-in-the-loop interrupt
+        log.info("awaiting human approval", extra={"ticket": key})
+        _safe_feedback(deps.tickets, key, TicketStatus.AWAITING_APPROVAL,
+                       f"AutoForge's change passed automated review and is waiting for approval.\n\n"
+                       f"{state['change'].summary}\n\n{_file_list(state)}\n\n"
+                       f"Approve: `autoforge resume {run_id}` · Reject: `autoforge resume {run_id} --reject`\n\n"
+                       f"Run ID: `{run_id}`")
+        return RunResult(run_id, RunOutcome.AWAITING_APPROVAL)
+
+    if state.get("human_rejected"):
+        _safe_feedback(deps.tickets, key, TicketStatus.FAILED,
+                       f"The proposed change was rejected at the approval step; no pull request was opened.\n\n"
+                       f"Run ID: `{run_id}`")
+        return RunResult(run_id, RunOutcome.REJECTED)
+
+    pr = state["pr"]
+    log.info("pull request opened", extra={"pr": pr.url, "commit": state["commit_sha"], "branch": state["branch"],
+                                           "files": len(state["change"].files), "attempts": state["attempts"],
+                                           "input_tokens": state["usage"].input_tokens,
+                                           "output_tokens": state["usage"].output_tokens})
     _safe_feedback(deps.tickets, key, TicketStatus.PR_OPENED,
                    f"AutoForge opened a pull request for review: {pr.url}\n\n"
-                   f"{result.change.summary}\n\nRun ID: `{run_id}`")
+                   f"{state['change'].summary}\n\nRun ID: `{run_id}`")
     return RunResult(run_id, RunOutcome.PR_OPENED, pr_url=pr.url)
 
 
-def _pr_body(ticket: Ticket, result: CoderResult, run_id: str) -> str:
+def _graph(deps: Dependencies, config: WorkflowConfig) -> CompiledStateGraph:
+    """Build the agent graph from the dependencies and config."""
+    return build_graph(
+        repo=deps.repo, coder=deps.coder, reviewer=deps.reviewer, checkpointer=deps.checkpointer,
+        settings=GraphSettings(max_context_bytes=config.max_context_bytes, max_file_bytes=config.max_file_bytes,
+                               max_attempts=config.max_attempts, require_approval=config.require_approval),
+        pr_body=_pr_body,
+    )
+
+
+def _thread(run_id: str) -> dict[str, Any]:
+    """LangGraph run config: the run ID is the checkpoint thread ID."""
+    return {"configurable": {"thread_id": run_id}}
+
+
+def _file_list(state: RunState) -> str:
+    """Markdown bullet list of the change's file operations."""
+    return "\n".join(f"- `{f.action}` {f.path}" for f in state["change"].files)
+
+
+def _pr_body(state: RunState) -> str:
     """Build the pull request description.
 
     It is the agent's own ``pr_body`` followed by a fixed footer: ``Closes #N``
-    (links the PR to the ticket), the list of changed files, a reminder that a
-    human must review, and run metadata (run ID, model, token usage).
+    (links the PR to the ticket), the list of changed files, the automated
+    review outcome (with any remaining minor findings), a reminder that a human
+    must review, and run metadata (run ID, models, attempts, token usage).
     """
-    files = "\n".join(f"- `{f.action}` {f.path}" for f in result.change.files)
-    return f"""{result.change.pr_body}
+    change, verdict, usage = state["change"], state["verdict"], state["usage"]
+    notes = "\n".join(f"- `{f.path or 'whole change'}`: {f.message}" for f in verdict.findings)
+    review = f"Approved by the AutoForge reviewer after {state['attempts']} coder attempt(s).\n\n{verdict.summary}"
+    if notes:
+        review += f"\n\nReviewer notes (non-blocking):\n{notes}"
+    return f"""{change.pr_body}
 
 ---
-Closes #{ticket.key}
+Closes #{state['ticket_key'].lstrip('#')}
 
 **Files**
-{files}
+{_file_list(state)}
+
+**Automated review**
+{review}
 
 > [!IMPORTANT]
 > AutoForge generated this pull request. A human must review it before it is merged.
 
-<sub>AutoForge run `{run_id}` · model `{result.model}` · tokens in/out {result.usage.input_tokens}/{result.usage.output_tokens}</sub>
+<sub>AutoForge run `{state['run_id']}` · coder `{state['coder_model']}` · reviewer `{state['reviewer_model']}` · tokens in/out {usage.input_tokens}/{usage.output_tokens}</sub>
 """
 
 

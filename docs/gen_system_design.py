@@ -86,9 +86,9 @@ block(EX, 991, EW, 46, "Container runtime", [], "ext")
 band(40, 150, 1120, 130, "app/  —  entry points & composition root")
 block(60, 190, 195, 64, "config.py", ["Settings · SecretStr"])
 block(280, 190, 195, 64, "wiring.py", ["build_dependencies()"])
-block(500, 190, 195, 64, "cli.py", ["autoforge run <issue>"])
-block(720, 190, 195, 64, "Run queue / worker", ["dedupe by delivery ID"], "planned")
-block(940, 190, 195, 64, "webhook.py", ["HMAC · actor permission check"], "planned")
+block(500, 190, 195, 64, "cli.py", ["run <issue> · resume <run_id>"])
+block(720, 190, 195, 64, "Run queue / worker", ["dedupe by delivery ID"], "next")
+block(940, 190, 195, 64, "webhook.py", ["HMAC · actor permission check"], "next")
 path("M255,222 H278")
 path("M940,222 H917", "dashed")
 path("M817,254 V268 H377 V256", "dashed")
@@ -97,17 +97,17 @@ path(f"M{EX},222 H1137", "dashed")
 
 # ---------------- band B: workflow ----------------
 band(40, 310, 1120, 130, "workflow/  —  orchestration")
-block(60, 350, 400, 64, "pipeline.py", ["run_ticket() · idempotency · ticket feedback", "uses agents/context.py · domain/policy.py"])
-block(500, 350, 400, 64, "graph.py  (LangGraph)", ["context → code ⇄ review → verify → publish", "HITL interrupt"], "next")
-block(940, 350, 195, 64, "Checkpoint store", ["graph state · resume"], "next")
+block(60, 350, 400, 64, "pipeline.py", ["run_ticket() · resume_run() · idempotency", "ticket feedback (comments · status labels)"])
+block(500, 350, 400, 64, "graph.py  (LangGraph)", ["prepare → code ⇄ review → (approve) → publish", "uses agents/context.py · domain/policy.py"])
+block(940, 350, 195, 64, "Checkpoint store", ["SQLite · thread = run_id"])
 path("M320,254 V348", label="Dependencies", lx=328, ly=300, anchor="start")
-path("M460,382 H498", "dashed")
-add('<text x="480" y="372" class="lbl" text-anchor="middle">1.2</text>')
-path("M900,382 H938", "dashed")
+path("M460,382 H498")
+add('<text x="480" y="372" class="lbl" text-anchor="middle">runs</text>')
+path("M900,382 H938")
 
 # bus to ports
 path("M260,414 V460", marker=None)
-path("M700,414 V460", "dashed", marker=None)
+path("M700,414 V460", marker=None)
 path("M150,460 H1060", marker=None)
 for cx in (150, 380, 700, 880, 1060):
     path(f"M{cx},460 V513")
@@ -116,7 +116,7 @@ add('<text x="540" y="454" class="lbl" text-anchor="middle">workflow calls ports
 # ---------------- band C: ports ----------------
 band(40, 480, 1120, 120, "ports.py", tx=540, anchor="middle", ty=598 - 8)
 port(70, 515, 160, 60, "Coder", "generate()")
-port(300, 515, 160, 60, "Reviewer", "review()", "next")
+port(300, 515, 160, 60, "Reviewer", "review()")
 port(620, 515, 160, 60, "TicketSource", "get · comment · status")
 port(800, 515, 160, 60, "RepoHost", "read · publish · PR")
 port(980, 515, 160, 60, "Verifier", "verify()", "planned")
@@ -125,10 +125,11 @@ port(980, 515, 160, 60, "Verifier", "verify()", "planned")
 band(40, 630, 540, 250, "agents/  —  LLM roles", ty=870)
 band(600, 630, 560, 250, "integrations/  —  adapters", tx=1146, anchor="end", ty=870)
 block(60, 670, 180, 64, "coder.py", ["OpenAICoder"])
-block(300, 670, 160, 64, "reviewer.py", ["verdict + feedback"], "next")
-block(60, 785, 160, 60, "context.py", ["snapshot via RepoHost"])
-block(235, 785, 160, 60, "prompts.py", ["versioned prompts"])
-block(410, 785, 160, 60, "languages/", ["Python · C rules"], "planned")
+block(300, 670, 160, 64, "reviewer.py", ["OpenAIReviewer · verdict"])
+block(60, 785, 125, 60, "context.py", ["repo snapshot"])
+block(195, 785, 125, 60, "prompts.py", ["coder + reviewer"])
+block(330, 785, 115, 60, "llm.py", ["structured_call"])
+block(455, 785, 115, 60, "languages/", ["Python · C rules"], "planned")
 
 block(620, 670, 160, 64, "github/issues.py", ["GitHubIssuesSource"])
 block(800, 670, 160, 64, "github/repo.py", ["GitHubRepoHost"])
@@ -137,20 +138,19 @@ block(620, 785, 160, 60, "jira/", ["implements TicketSource"], "planned")
 block(800, 785, 160, 60, "github/client.py", ["retries · no merge"])
 
 # implements (adapter -> port)
-for cx, kind in ((150, "built"), (380, "next"), (700, "built"), (880, "built"), (1060, "planned")):
+for cx, kind in ((150, "built"), (380, "built"), (700, "built"), (880, "built"), (1060, "planned")):
     path(f"M{cx},668 V578", "impl", marker="tri")
 add('<text x="160" y="628" class="lbl" text-anchor="start">implements</text>')
 
 # internal calls
-path("M150,734 V760 H300 V783")
-path("M380,734 V760 H330 V783", "dashed")
-path("M410,815 H397", "dashed")
+path("M215,734 V783")                      # coder -> prompts
+path("M240,712 H270 V765 H350 V783")       # coder -> llm
+path("M400,734 V783")                      # reviewer -> llm
 path("M700,734 V760 H860 V783")
 path("M880,734 V783")
 
 # to external systems
-path(f"M228,734 V900 H{EX - 2}", label="responses.parse", lx=620, ly=894)
-path("M402,734 V900", "dashed", marker=None)
+path(f"M387,845 V900 H{EX - 2}", label="responses.parse (coder + reviewer)", lx=540, ly=894)
 path(f"M960,815 H{EX - 2}", label="HTTPS", lx=1090, ly=809)
 path(f"M700,845 V958 H{EX - 2}", "dashed")
 path(f"M1140,702 H1190 V1014 H{EX - 2}", "dashed")
@@ -163,9 +163,9 @@ path(f"M1350,790 V256", label="issues.labeled", lx=1358, ly=520, anchor="start")
 
 # ---------------- domain ----------------
 band(40, 1050, 1120, 110, "domain/  —  pure core (no I/O)")
-block(60, 1082, 360, 60, "models.py", ["Ticket · RepoSnapshot · CodeChange · PullRequest"])
+block(60, 1082, 360, 60, "models.py", ["Ticket · RepoSnapshot · PullRequest", "CodeChange · ReviewVerdict · Revision"])
 block(440, 1082, 360, 60, "policy.py", ["validate_change · assert_writable_branch"])
-block(820, 1082, 320, 60, "errors.py", ["TicketError · SafetyError · AgentError"])
+block(820, 1082, 320, 60, "errors.py", ["TicketError · SafetyError", "AgentError · ReviewRejectedError"])
 path("M24,215 V1048", label="", marker="arrow")
 add('<text x="18" y="640" class="lbl" text-anchor="middle" transform="rotate(-90 18 640)">every layer depends on domain/ (never the reverse)</text>')
 add('<text x="1146" y="1068" class="lbl" text-anchor="end">← github/repo.py enforces policy before every write</text>')
@@ -177,8 +177,8 @@ block(610, 1206, 530, 54, "evals/", ["sample tickets · quality scoring of agent
 
 # ---------------- legend ----------------
 ly = 1300
-items = [("built", "Built (Phase 1.1)"), ("next", "Next (1.2 LangGraph + reviewer)"),
-         ("planned", "Planned (1.3 / 1.4 / later)"), ("ext", "External system"), ("actor", "Actor")]
+items = [("built", "Built (Phase 1.1–1.2)"), ("next", "Next (1.3 webhook · Docker · CI)"),
+         ("planned", "Planned (1.4 / later)"), ("ext", "External system"), ("actor", "Actor")]
 x = 40
 for kind, text in items:
     fill, stroke, dash = STYLE[kind]

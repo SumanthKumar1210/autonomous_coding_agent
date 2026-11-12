@@ -1,22 +1,20 @@
 """Coder agent backed by OpenAI structured outputs (Responses API).
 
 "Structured outputs" means OpenAI is given the JSON schema of ``CodeChange``
-and must answer with JSON matching it exactly. The SDK's
-``responses.parse(text_format=CodeChange)`` then returns a validated
-``CodeChange`` object, so there is no fragile text parsing.
+and must answer with JSON matching it exactly, so there is no fragile text
+parsing. The call itself lives in ``agents.llm``.
+
+On a retry the coder also receives a ``Revision``: its previous change and
+the feedback (reviewer findings or a policy error) it must address.
 """
 
 from __future__ import annotations
 
-import logging
-
 from openai import OpenAI
 
+from autoforge.agents.llm import structured_call
 from autoforge.agents.prompts import CODER_SYSTEM_PROMPT, build_coder_input
-from autoforge.domain.errors import AgentError
-from autoforge.domain.models import CodeChange, CoderResult, RepoSnapshot, Ticket, TokenUsage
-
-log = logging.getLogger(__name__)
+from autoforge.domain.models import CodeChange, CoderResult, RepoSnapshot, Revision, Ticket
 
 
 class OpenAICoder:
@@ -45,51 +43,27 @@ class OpenAICoder:
         self._model = model
         self._max_output_tokens = max_output_tokens
 
-    def generate(self, ticket: Ticket, snapshot: RepoSnapshot) -> CoderResult:
+    def generate(self, ticket: Ticket, snapshot: RepoSnapshot, revision: Revision | None = None) -> CoderResult:
         """Ask the model to implement ``ticket`` and return its structured change.
 
         Args:
             ticket: The ticket to implement.
             snapshot: Repository context (tree + selected file contents).
+            revision: Previous attempt and feedback to address, or ``None``.
 
         Returns:
             The parsed ``CodeChange`` plus token usage and model ID.
 
         Raises:
-            AgentError: If the response was truncated (``status == "incomplete"``),
-                or the model refused / returned no parseable output.
+            AgentError: If the response was truncated or the model refused.
         """
-        response = self._client.responses.parse(
+        change, usage = structured_call(
+            self._client,
             model=self._model,
             instructions=CODER_SYSTEM_PROMPT,
-            input=build_coder_input(ticket, snapshot),
-            text_format=CodeChange,
+            input_text=build_coder_input(ticket, snapshot, revision),
+            schema=CodeChange,
             max_output_tokens=self._max_output_tokens,
+            agent="coder",
         )
-        usage = TokenUsage(
-            input_tokens=response.usage.input_tokens if response.usage else 0,
-            output_tokens=response.usage.output_tokens if response.usage else 0,
-        )
-        log.info("coder response", extra={"model": self._model, "status": response.status,
-                                           "input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens})
-
-        if response.status == "incomplete":
-            reason = response.incomplete_details.reason if response.incomplete_details else "unknown"
-            raise AgentError(f"LLM response incomplete ({reason})")
-        parsed = response.output_parsed
-        if parsed is None:
-            raise AgentError(f"LLM returned no structured change (refusal or empty output): {_refusal_text(response)}")
-        return CoderResult(change=parsed, usage=usage, model=self._model)
-
-
-def _refusal_text(response: object) -> str:
-    """Extract the model's refusal message from a response, if it gave one.
-
-    Used only to make the error posted on the ticket more informative.
-    Returns at most 300 characters, or ``"no refusal text"``.
-    """
-    for item in getattr(response, "output", []) or []:
-        for content in getattr(item, "content", []) or []:
-            if getattr(content, "type", None) == "refusal":
-                return str(getattr(content, "refusal", ""))[:300]
-    return "no refusal text"
+        return CoderResult(change=change, usage=usage, model=self._model)

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     Attributes:
         openai_api_key: OpenAI API key (``OPENAI_API_KEY``). Required, secret.
         openai_model: Model ID for the coder agent, e.g. ``"gpt-6-luna"``. Required.
+        openai_reviewer_model: Model ID for the reviewer agent; empty means use ``openai_model``.
         openai_max_output_tokens: Upper bound on tokens the model may generate.
         openai_timeout_seconds: Timeout for one OpenAI call.
         github_token: Fine-grained GitHub token for the target repo. Required, secret.
@@ -32,6 +33,9 @@ class Settings(BaseSettings):
         branch_prefix: Prefix of agent branches (``autoforge/issue-N``).
         max_context_bytes: Total file-content budget sent to the LLM per run.
         max_file_bytes: Largest single file sent to the LLM.
+        max_attempts: Maximum coder attempts per run (first try + revisions after review).
+        require_approval: Pause each run for human approval before opening the PR.
+        checkpoint_db: SQLite file holding run checkpoints (needed to resume paused runs).
         log_level: Minimum log level (``DEBUG``, ``INFO``, ``WARNING`` ...).
     """
 
@@ -40,6 +44,7 @@ class Settings(BaseSettings):
     # LLM
     openai_api_key: SecretStr
     openai_model: str = Field(min_length=1)
+    openai_reviewer_model: str = ""
     openai_max_output_tokens: int = 32_000
     openai_timeout_seconds: float = 600.0
 
@@ -54,5 +59,13 @@ class Settings(BaseSettings):
     branch_prefix: str = "autoforge/"
     max_context_bytes: int = 60_000
     max_file_bytes: int = 20_000
+    max_attempts: int = Field(default=3, ge=1, le=10)
+    require_approval: bool = False
+    checkpoint_db: str = ".autoforge/checkpoints.sqlite"
 
     log_level: str = "INFO"
+
+    @property
+    def reviewer_model(self) -> str:
+        """Model ID for the reviewer: ``openai_reviewer_model`` if set, else ``openai_model``."""
+        return self.openai_reviewer_model or self.openai_model

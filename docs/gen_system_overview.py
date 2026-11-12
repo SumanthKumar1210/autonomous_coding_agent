@@ -62,8 +62,8 @@ add('<text x="412" y="134" font-size="13" fill="#57606a">agentic coding pipeline
 steps = [
     ("Understand", ["reads the ticket", "+ repository code"], "green", None, False),
     ("Write code", ["Coder agent", "(LLM)"], "green", None, False),
-    ("Review", ["Reviewer agent", "sends fixes back"], "yellow", "NEXT", False),
     ("Safety checks", ["blocks unsafe or", "out-of-scope edits"], "green", None, False),
+    ("Review", ["Reviewer agent", "sends fixes back"], "green", None, False),
     ("Verify", ["lint & tests", "in a sandbox"], "grey", "PLANNED", True),
 ]
 xs = [310, 456, 602, 748, 894]
@@ -72,7 +72,7 @@ for i, ((title, lines, color, tag, dashed), x) in enumerate(zip(steps, xs)):
     if i < len(xs) - 1:
         arrow(f"M{x + 132},238 H{xs[i + 1] - 2}")
 # review -> write code feedback loop
-arrow("M668,172 V152 H522 V170", "fixes", 595, 147)
+arrow("M814,172 V152 H522 V170", "fixes (bounded loop)", 668, 147)
 # trace banner
 add('<rect x="640" y="322" width="386" height="66" rx="10" fill="#ffffff" stroke="#d0d7de"/>')
 add('<text x="833" y="343" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">'
@@ -88,7 +88,7 @@ arrow("M500,304 V450", "prompt", 492, 430, anchor="end")
 arrow("M544,452 V306", "code change", 552, 430, anchor="start")
 
 # ---- 7. pull request, 8. human merge ----
-box(1100, 150, 140, 130, "Pull request", ["branch + commit", "“Closes #N”"], "green", num=7, tsize=15)
+box(1100, 150, 140, 130, "Pull request", ["branch + commit", "+ review outcome"], "green", num=7, tsize=15)
 box(1280, 150, 130, 130, "Engineer", ["reviews &", "merges"], "purple", num=8, tsize=15)
 add('<rect x="1262" y="296" width="166" height="46" rx="8" fill="#fff8f0" stroke="#d1242f" stroke-width="1.4"/>')
 add('<text x="1345" y="315" font-size="12" font-weight="700" fill="#d1242f" text-anchor="middle">Human-in-the-loop</text>')

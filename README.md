@@ -37,9 +37,9 @@ turns a ticket into a reviewed pull request.
 
 | Increment | Scope | Status |
 |---|---|---|
-| 1. Core pipeline | GitHub issue → OpenAI coder agent (structured outputs) → validated change → branch + commit → PR → issue comment/labels | ✅ Built, 51 automated tests |
-| 2. Multi-agent orchestration | **LangGraph** coder ↔ reviewer/critic loop, persistent checkpoints, human-in-the-loop interrupt | ⚪ Next |
-| 3. Service & delivery | Webhook-driven service (HMAC-verified), idempotent runs, Docker, CI | ⚪ Planned |
+| 1. Core pipeline | GitHub issue → OpenAI coder agent (structured outputs) → validated change → branch + commit → PR → issue comment/labels | ✅ Built |
+| 2. Multi-agent orchestration | **LangGraph** graph: coder ↔ reviewer/critic loop (bounded attempts, policy violations fed back to the coder), SQLite checkpoints, optional human-approval interrupt with `autoforge resume` | ✅ Built, 68 automated tests |
+| 3. Service & delivery | Webhook-driven service (HMAC-verified), idempotent runs, Docker, CI | ⚪ Next |
 | 4. Quality | Repo-context retrieval, C code generation, sandboxed pre-PR verification (lint/tests), evaluation harness measuring reviewer lift | ⚪ Planned |
 | Later | Jira as a second ticket source (pluggable `TicketSource` port) | ⚪ Planned |
 
@@ -91,15 +91,15 @@ flowchart LR
     POL -.-> REQ
     ENTRY --> ORCH
     ORCH --> CTX --> CODER
-    CODER <-.->|feedback loop| REVIEW
+    CODER <-->|feedback loop| REVIEW
     CODER --> POLICY
-    REVIEW -.-> POLICY
+    REVIEW --> POLICY
     TESTGEN -.-> VERIFY
     POLICY --> PR
     POLICY -.-> VERIFY -.-> PR
     HIL -.-> BENCH
     CODER <--> LLM
-    REVIEW -.-> LLM
+    REVIEW <--> LLM
     PR --> HUMAN
     PR -->|status + PR link| GHI
     ORCH --- OBS
@@ -107,14 +107,13 @@ flowchart LR
     classDef built fill:#d4f7dc,stroke:#1a7f37,color:#0b3d1a
     classDef next fill:#fff4cc,stroke:#bf8700,color:#4d3800
     classDef planned fill:#f0f0f0,stroke:#8c959f,color:#57606a,stroke-dasharray:4 3
-    class GHI,ENTRY,CTX,CODER,POLICY,OBS,PR,HUMAN,LLM built
-    class ORCH,REVIEW next
+    class GHI,ENTRY,ORCH,CTX,CODER,REVIEW,POLICY,OBS,PR,HUMAN,LLM built
     class JIRA,POL,TESTGEN,REQ,HIL,VERIFY,BENCH planned
 ```
 
-<sub>🟩 built (Phase 1.1) · 🟨 next (Phase 1.2) · ⬜ planned (Phase 1.3+ and Phases 2–4) · solid
-arrows = working today, dashed = planned. In Phase 1.1 the orchestrator is a
-linear pipeline; LangGraph replaces it in 1.2.</sub>
+<sub>🟩 built (Phase 1.1–1.2) · ⬜ planned (Phase 1.3+ and Phases 2–4) · solid
+arrows = working today, dashed = planned. The webhook service entry point
+arrives in 1.3; today runs start from the CLI.</sub>
 
 Layers, ports and the per-run sequence diagram are in
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -141,31 +140,41 @@ Layers, ports and the per-run sequence diagram are in
 
 ## Tech stack
 
-Python 3.11 · OpenAI Responses API (structured outputs) · LangGraph (Phase 1.2)
+Python 3.11 · OpenAI Responses API (structured outputs) · LangGraph (SQLite checkpoints)
 · GitHub REST API · pydantic / pydantic-settings · httpx · pytest · Docker and
 CI (Phase 1.3)
 
-## How it works today (Phase 1, increment 1)
+## How it works today (Phase 1, increments 1–2)
 
-`autoforge run <issue>` does the following:
+`autoforge run <issue>` runs a LangGraph agent graph:
 
 1. Reads the GitHub issue (title, body, comments, labels) and labels it
    `autoforge:in-progress`.
 2. Snapshots the repo's default branch: the file tree plus convention and
    source files, up to a size budget.
-3. Asks the OpenAI coder agent for a structured change (files, commit message,
-   PR title and body).
-4. Validates the change against the policy layer: paths must be safe, nothing
-   may be written under `.git/` or `.github/workflows/`, and a file can only be
-   modified if the agent saw its current content.
-5. Commits to `autoforge/issue-<N>` and opens a PR against the default branch
-   (`Closes #N`).
-6. Comments the PR link on the issue and labels it `autoforge:pr-opened`. If
-   the run fails, it labels the issue `autoforge:failed` and comments the error.
+3. **Coder agent** (OpenAI, structured outputs) proposes a change: files,
+   commit message, PR title and body.
+4. **Policy layer** validates it: paths must be safe, nothing may be written
+   under `.git/` or `.github/workflows/`, and a file can only be modified if
+   the agent saw its current content. A violation goes back to the coder as
+   feedback.
+5. **Reviewer agent** checks the change against the ticket's acceptance
+   criteria, correctness, safety and repo conventions, and returns a verdict
+   with findings graded blocker / major / minor. Blocking findings go back to
+   the coder, up to `MAX_ATTEMPTS` (default 3). If the reviewer still rejects,
+   no PR is opened and the findings are posted on the issue.
+6. **Optional human approval** (`REQUIRE_APPROVAL=true`): the graph pauses and
+   checkpoints its state. `autoforge resume <run_id>` publishes the reviewed
+   change; `--reject` discards it. The run survives a restart in between.
+7. Commits to `autoforge/issue-<N>` and opens a PR against the default branch
+   (`Closes #N`), including the review outcome, any non-blocking reviewer
+   notes, and the run's total token usage.
+8. Comments the PR link on the issue and labels it `autoforge:pr-opened`. If
+   the run fails, it labels the issue `autoforge:failed` and comments why.
 
 Re-running a ticket that already has an open AutoForge PR does nothing, so no
 duplicate PR is opened. Every run has a run ID, which appears in the JSON logs,
-the PR and the issue comment.
+the checkpoint, the PR and the issue comment.
 
 ## Setup
 
@@ -183,13 +192,15 @@ repo needs at least one commit on its default branch.
 ## Usage
 
 ```bash
-autoforge run 12              # or: python -m autoforge run 12
+autoforge run 12                    # or: python -m autoforge run 12
+autoforge resume <run_id>           # approve a run paused for approval (REQUIRE_APPROVAL=true)
+autoforge resume <run_id> --reject  # reject it; no PR is opened
 ```
 
-The command prints a JSON result line (`run_id`, `outcome`, `pr_url`, `error`)
-on stdout and writes structured logs to stderr. Exit codes: 0 means a PR was
-opened or one already exists, 1 means the run failed, 2 means a configuration
-error.
+Each command prints a JSON result line (`run_id`, `outcome`, `pr_url`, `error`)
+on stdout and writes structured logs to stderr. Outcomes: `pr_opened`,
+`already_open`, `awaiting_approval`, `rejected`, `failed`. Exit codes: 1 means
+the run failed, 2 means a configuration error, 0 otherwise.
 
 ## Tests
 
@@ -197,6 +208,7 @@ error.
 pytest
 ```
 
-The tests run against an in-memory fake GitHub API and a fake coder. They make
+The tests run against an in-memory fake GitHub API and scripted fake coder and
+reviewer agents. They make
 no network calls. They also enforce the architecture's layer rules and the
 PR-only safety guarantees.

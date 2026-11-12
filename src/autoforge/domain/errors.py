@@ -40,3 +40,11 @@ class AgentError(AutoForgeError):
     Examples: the model refused, its output was cut off by the token limit, or
     it returned nothing parseable.
     """
+
+
+class ReviewRejectedError(AgentError):
+    """The reviewer did not approve the change within the allowed number of attempts.
+
+    The message lists the unresolved findings so they can be posted on the
+    ticket. No pull request is opened.
+    """

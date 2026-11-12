@@ -1,6 +1,9 @@
 # Secrets — never commit
 .env
 
+# Local run state (LangGraph checkpoints contain ticket and repo content)
+.autoforge/
+
 # Python
 __pycache__/
 *.py[cod]
