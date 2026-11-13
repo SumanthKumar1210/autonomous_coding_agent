@@ -15,7 +15,8 @@ from autoforge.domain.models import (
     TokenUsage,
 )
 
-GOOD_FILES = [FileChange(path="src/temperature.py", action="create", content="def c_to_f(c):\n    return c * 9 / 5 + 32")]
+GOOD_FILES = [FileChange(path="src/temperature.py", action="create",
+                         content="def c_to_f(c):\n    return c * 9 / 5 + 32")]
 
 
 class FakeCoder:
@@ -52,7 +53,8 @@ class FakeCoder:
 def approve(*minor: str) -> ReviewVerdict:
     """An approving verdict, optionally with non-blocking minor findings."""
     return ReviewVerdict(approved=True, summary="Looks good.",
-                         findings=[ReviewFinding(severity="minor", path="src/temperature.py", message=m) for m in minor])
+                         findings=[ReviewFinding(severity="minor", path="src/temperature.py", message=m)
+                                   for m in minor])
 
 
 def reject(message: str = "Handles no invalid input.", severity: str = "blocker") -> ReviewVerdict:

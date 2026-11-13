@@ -272,3 +272,72 @@ class Revision:
 
     previous: CodeChange
     feedback: str
+
+
+# ------------------------------------------------------------- triggers & jobs
+
+
+class TriggerKind(str, Enum):
+    """What a trigger asks AutoForge to do.
+
+    - ``RUN``: implement the ticket (e.g. the ``autoforge`` label was added).
+    - ``APPROVE`` / ``REJECT``: decide a run paused at the approval gate
+      (e.g. an ``/autoforge approve`` comment).
+    """
+
+    RUN = "run"
+    APPROVE = "approve"
+    REJECT = "reject"
+
+
+@dataclass(frozen=True)
+class Trigger:
+    """A request to act on a ticket, independent of where it came from.
+
+    Produced by the webhook (from a GitHub event) or by the CLI.
+
+    Attributes:
+        kind: Run, approve or reject.
+        ticket_key: Ticket the request is about, e.g. ``"12"``.
+        delivery_id: Unique ID of the request. For webhooks this is GitHub's
+            ``X-GitHub-Delivery`` header, so a redelivered event is recognised
+            and ignored.
+        actor: Login of the user who caused it (checked for write access), or
+            ``None`` for the trusted local CLI.
+    """
+
+    kind: TriggerKind
+    ticket_key: str
+    delivery_id: str
+    actor: str | None = None
+
+
+class JobStatus(str, Enum):
+    """Lifecycle of a queued job: ``queued`` -> ``running`` -> ``done`` / ``failed``."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class Job:
+    """A trigger stored in the job queue, plus what became of it.
+
+    Attributes:
+        id: Queue position (auto-increment).
+        trigger: The request.
+        status: Where the job is in its lifecycle.
+        run_id: The workflow run the job started or resumed, once known.
+        outcome: Result, e.g. ``"pr_opened"``, ``"awaiting_approval"``,
+            ``"unauthorized"`` or ``"skipped"``.
+        error: Failure reason, if any.
+    """
+
+    id: int
+    trigger: Trigger
+    status: JobStatus
+    run_id: str | None = None
+    outcome: str | None = None
+    error: str | None = None

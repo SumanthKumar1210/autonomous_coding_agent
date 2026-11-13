@@ -22,6 +22,7 @@ from autoforge.domain.models import (
     BaseRef,
     CodeChange,
     CoderResult,
+    Job,
     PullRequest,
     RepoFile,
     RepoSnapshot,
@@ -29,6 +30,7 @@ from autoforge.domain.models import (
     Revision,
     Ticket,
     TicketStatus,
+    Trigger,
 )
 
 
@@ -53,6 +55,14 @@ class TicketSource(Protocol):
 
     def set_status(self, key: str, status: TicketStatus) -> None:
         """Mark the ticket with a progress status (replacing any previous one)."""
+        ...
+
+    def is_authorized(self, actor: str) -> bool:
+        """Return True if ``actor`` may trigger AutoForge (has write access to the project).
+
+        Hard constraint: only act on tickets labelled (and runs approved) by
+        users with write access.
+        """
         ...
 
 
@@ -135,4 +145,47 @@ class Reviewer(Protocol):
         Raises:
             AgentError: If the model refuses, is truncated, or returns nothing usable.
         """
+        ...
+
+
+class JobStore(Protocol):
+    """Durable queue of triggers, and the record of which run each one produced.
+
+    Implemented by ``SqliteJobStore``. The webhook adds jobs; the worker
+    claims and completes them. It is also how AutoForge finds the run waiting
+    for approval on a ticket.
+    """
+
+    def add(self, trigger: Trigger, *, claim: bool = False) -> Job | None:
+        """Store a new job.
+
+        Args:
+            trigger: The request.
+            claim: ``True`` stores it already ``running`` (the caller processes
+                it now, e.g. the CLI) so the worker never picks it up.
+
+        Returns:
+            The job, or ``None`` if a job with the same ``delivery_id`` exists
+            (a redelivered webhook).
+        """
+        ...
+
+    def has_pending(self, ticket_key: str, kind: str) -> bool:
+        """Return True if a queued or running job of ``kind`` exists for the ticket."""
+        ...
+
+    def claim_next(self) -> Job | None:
+        """Atomically take the oldest queued job and mark it running; ``None`` if the queue is empty."""
+        ...
+
+    def finish(self, job_id: int, *, run_id: str | None, outcome: str, error: str | None = None) -> None:
+        """Record a job's result: ``done``, or ``failed`` when ``error`` is set."""
+        ...
+
+    def last_run(self, ticket_key: str) -> tuple[str, str] | None:
+        """Return ``(run_id, outcome)`` of the most recent job that ran the ticket's workflow, if any."""
+        ...
+
+    def requeue_running(self) -> int:
+        """Return jobs left ``running`` by a crash to ``queued`` (called at startup); return how many."""
         ...

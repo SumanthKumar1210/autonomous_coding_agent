@@ -38,9 +38,9 @@ turns a ticket into a reviewed pull request.
 | Increment | Scope | Status |
 |---|---|---|
 | 1. Core pipeline | GitHub issue → OpenAI coder agent (structured outputs) → validated change → branch + commit → PR → issue comment/labels | ✅ Built |
-| 2. Multi-agent orchestration | **LangGraph** graph: coder ↔ reviewer/critic loop (bounded attempts, policy violations fed back to the coder), SQLite checkpoints, optional human-approval interrupt with `autoforge resume` | ✅ Built, 68 automated tests |
-| 3. Service & delivery | Webhook-driven service (HMAC-verified), idempotent runs, Docker, CI | ⚪ Next |
-| 4. Quality | Repo-context retrieval, C code generation, sandboxed pre-PR verification (lint/tests), evaluation harness measuring reviewer lift | ⚪ Planned |
+| 2. Multi-agent orchestration | **LangGraph** graph: coder ↔ reviewer/critic loop (bounded attempts, policy violations fed back to the coder), SQLite checkpoints, optional human-approval interrupt | ✅ Built |
+| 3. Service & delivery | **FastAPI** webhook service (HMAC-verified, write-access check), durable SQLite job queue + background worker, idempotent runs (redelivery and re-label dedupe), `/autoforge approve` comments, Docker image + compose, GitHub Actions CI (ruff, mypy --strict, pytest, Docker build) | ✅ Built, 115 automated tests |
+| 4. Quality | Repo-context retrieval, C code generation, sandboxed pre-PR verification (lint/tests), evaluation harness measuring reviewer lift | ⚪ Next |
 | Later | Jira as a second ticket source (pluggable `TicketSource` port) | ⚪ Planned |
 
 ## Architecture
@@ -111,9 +111,8 @@ flowchart LR
     class JIRA,POL,TESTGEN,REQ,HIL,VERIFY,BENCH planned
 ```
 
-<sub>🟩 built (Phase 1.1–1.2) · ⬜ planned (Phase 1.3+ and Phases 2–4) · solid
-arrows = working today, dashed = planned. The webhook service entry point
-arrives in 1.3; today runs start from the CLI.</sub>
+<sub>🟩 built (Phase 1.1–1.3) · ⬜ planned (Phase 1.4 and Phases 2–4) · solid
+arrows = working today, dashed = planned.</sub>
 
 Layers, ports and the per-run sequence diagram are in
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -141,12 +140,16 @@ Layers, ports and the per-run sequence diagram are in
 ## Tech stack
 
 Python 3.11 · OpenAI Responses API (structured outputs) · LangGraph (SQLite checkpoints)
-· GitHub REST API · pydantic / pydantic-settings · httpx · pytest · Docker and
-CI (Phase 1.3)
+· FastAPI / uvicorn · GitHub REST API and webhooks · pydantic / pydantic-settings · httpx
+· SQLite · pytest · ruff · mypy (strict) · Docker · GitHub Actions
 
-## How it works today (Phase 1, increments 1–2)
+## How it works today (Phase 1, increments 1–3)
 
-`autoforge run <issue>` runs a LangGraph agent graph:
+A maintainer adds the `autoforge` label to an issue. GitHub sends a webhook to
+the AutoForge service, which verifies its HMAC signature, drops duplicates,
+queues a job and replies at once. A background worker checks that the person
+who added the label has write access, then runs the LangGraph agent graph
+(`autoforge run <issue>` runs the same steps from the CLI):
 
 1. Reads the GitHub issue (title, body, comments, labels) and labels it
    `autoforge:in-progress`.
@@ -164,17 +167,19 @@ CI (Phase 1.3)
    the coder, up to `MAX_ATTEMPTS` (default 3). If the reviewer still rejects,
    no PR is opened and the findings are posted on the issue.
 6. **Optional human approval** (`REQUIRE_APPROVAL=true`): the graph pauses and
-   checkpoints its state. `autoforge resume <run_id>` publishes the reviewed
-   change; `--reject` discards it. The run survives a restart in between.
+   checkpoints its state. A maintainer comments `/autoforge approve` to
+   publish the reviewed change, or `/autoforge reject` to discard it. The run
+   survives a restart in between.
 7. Commits to `autoforge/issue-<N>` and opens a PR against the default branch
    (`Closes #N`), including the review outcome, any non-blocking reviewer
    notes, and the run's total token usage.
 8. Comments the PR link on the issue and labels it `autoforge:pr-opened`. If
    the run fails, it labels the issue `autoforge:failed` and comments why.
 
-Re-running a ticket that already has an open AutoForge PR does nothing, so no
-duplicate PR is opened. Every run has a run ID, which appears in the JSON logs,
-the checkpoint, the PR and the issue comment.
+Duplicates are handled at every level. A webhook GitHub redelivers is processed
+once. A second label on a ticket that is already queued, already has an open
+AutoForge PR, or is waiting for approval starts nothing new. Every run has a run
+ID, which appears in the JSON logs, the checkpoint, the PR and the issue comment.
 
 ## Setup
 
@@ -191,24 +196,34 @@ repo needs at least one commit on its default branch.
 
 ## Usage
 
+**As a service** (the normal way): `docker compose up -d --build`, then point a
+GitHub webhook at it. Step-by-step instructions, including a local tunnel, are in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). After that, label an issue `autoforge`.
+
+**From the CLI** (development and re-runs):
+
 ```bash
+autoforge serve --port 8080         # the webhook service without Docker
 autoforge run 12                    # or: python -m autoforge run 12
 autoforge resume <run_id>           # approve a run paused for approval (REQUIRE_APPROVAL=true)
 autoforge resume <run_id> --reject  # reject it; no PR is opened
 ```
 
-Each command prints a JSON result line (`run_id`, `outcome`, `pr_url`, `error`)
+`run` and `resume` print a JSON result line (`run_id`, `outcome`, `pr_url`, `error`)
 on stdout and writes structured logs to stderr. Outcomes: `pr_opened`,
-`already_open`, `awaiting_approval`, `rejected`, `failed`. Exit codes: 1 means
+`already_open`, `awaiting_approval`, `rejected`, `skipped`, `failed`. Exit codes: 1 means
 the run failed, 2 means a configuration error, 0 otherwise.
 
 ## Tests
 
 ```bash
-pytest
+ruff check && mypy && pytest                     # what CI runs
+AUTOFORGE_INTEGRATION=1 pytest -m integration    # opt-in, read-only check against the real repo
 ```
 
 The tests run against an in-memory fake GitHub API and scripted fake coder and
-reviewer agents. They make
-no network calls. They also enforce the architecture's layer rules and the
-PR-only safety guarantees.
+reviewer agents. They make no network calls. They cover the webhook service
+(signatures, dedupe), the job queue and worker (authorization, approvals), and
+pause/resume across real SQLite files. They also enforce the architecture's layer
+rules and the PR-only safety guarantees. GitHub Actions runs lint, strict type
+checks and the tests on Python 3.11 and 3.12, then builds the Docker image.

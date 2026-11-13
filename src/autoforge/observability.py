@@ -23,8 +23,11 @@ from datetime import UTC, datetime
 run_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("run_id", default=None)
 """The run ID of the run currently executing (``None`` outside a run)."""
 
-_STANDARD_ATTRS = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {"message", "asctime"}
-"""Built-in LogRecord attributes; anything else on a record came from ``extra=``."""
+_STANDARD_ATTRS = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {
+    "message", "asctime",
+    "color_message",  # uvicorn's ANSI-coloured duplicate of the message
+}
+"""Built-in LogRecord attributes (and known noise); anything else on a record came from ``extra=``."""
 
 
 @contextmanager

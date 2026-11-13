@@ -17,7 +17,6 @@ from autoforge.integrations.github.issues import GitHubIssuesSource
 from autoforge.integrations.github.repo import GitHubRepoHost
 from autoforge.workflow.graph import checkpoint_serializer
 from autoforge.workflow.pipeline import Dependencies, RunOutcome, WorkflowConfig, resume_run, run_ticket
-
 from tests.fake_agents import GOOD_FILES, FakeCoder, FakeReviewer, approve, reject
 from tests.fake_github import FakeGitHub
 
@@ -139,7 +138,9 @@ def test_review_rejected_after_max_attempts_fails_without_pr() -> None:
     fake.add_issue(7)
     coder = FakeCoder()
 
-    result = _run(fake, coder, FakeReviewer(reject("Off-by-one in limit check.")), config=WorkflowConfig(max_attempts=2))
+    reviewer = FakeReviewer(reject("Off-by-one in limit check."))
+
+    result = _run(fake, coder, reviewer, config=WorkflowConfig(max_attempts=2))
 
     assert result.outcome is RunOutcome.FAILED
     assert "ReviewRejectedError" in (result.error or "")

@@ -69,6 +69,14 @@ class GitHubIssuesSource:
                 self._gh.remove_issue_label(number, self._label(other))
         self._gh.add_issue_labels(number, [self._label(status)])
 
+    def is_authorized(self, actor: str) -> bool:
+        """Return True if ``actor`` has write (or admin) access to the repository.
+
+        Only such users may trigger runs or approve them; anyone else's label
+        or comment is ignored.
+        """
+        return self._gh.get_collaborator_permission(actor) in {"admin", "write"}
+
     def _label(self, status: TicketStatus) -> str:
         """Return the label name for a status, e.g. ``"autoforge:failed"``."""
         return f"{self._label_prefix}:{status.value}"

@@ -28,6 +28,8 @@ class Settings(BaseSettings):
         github_token: Fine-grained GitHub token for the target repo. Required, secret.
         github_repo: Target repository as ``"owner/repo"``. Required.
         github_api_url: GitHub API root (change only for GitHub Enterprise).
+        github_webhook_secret: Secret GitHub signs webhook deliveries with. Required by
+            ``autoforge serve``; not needed for the CLI.
         http_timeout_seconds: Timeout for one GitHub API call.
         trigger_label: Label that marks issues for AutoForge; also the status-label prefix.
         branch_prefix: Prefix of agent branches (``autoforge/issue-N``).
@@ -36,6 +38,8 @@ class Settings(BaseSettings):
         max_attempts: Maximum coder attempts per run (first try + revisions after review).
         require_approval: Pause each run for human approval before opening the PR.
         checkpoint_db: SQLite file holding run checkpoints (needed to resume paused runs).
+        jobs_db: SQLite file holding the job queue (webhook triggers and their results).
+        worker_poll_seconds: How often the worker checks an empty queue.
         log_level: Minimum log level (``DEBUG``, ``INFO``, ``WARNING`` ...).
     """
 
@@ -53,6 +57,7 @@ class Settings(BaseSettings):
     github_repo: str = Field(pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     github_api_url: str = "https://api.github.com"
     http_timeout_seconds: float = 30.0
+    github_webhook_secret: SecretStr | None = None
 
     # Agent behaviour
     trigger_label: str = "autoforge"
@@ -62,6 +67,8 @@ class Settings(BaseSettings):
     max_attempts: int = Field(default=3, ge=1, le=10)
     require_approval: bool = False
     checkpoint_db: str = ".autoforge/checkpoints.sqlite"
+    jobs_db: str = ".autoforge/jobs.sqlite"
+    worker_poll_seconds: float = Field(default=2.0, gt=0)
 
     log_level: str = "INFO"
 

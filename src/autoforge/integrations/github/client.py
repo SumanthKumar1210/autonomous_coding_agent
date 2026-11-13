@@ -162,7 +162,8 @@ class GitHubClient:
                 continue
             break
 
-        assert resp is not None
+        if resp is None:  # unreachable: the loop runs at least once and returns or raises
+            raise GitHubError(None, f"{method} {path}: no response")
         if allow_404 and resp.status_code == 404:
             return None
         if resp.status_code >= 400:
@@ -181,7 +182,7 @@ class GitHubClient:
         if retry_after and retry_after.isdigit():
             delay = min(float(retry_after), 60.0)
         else:
-            delay = min(2.0 ** (attempt - 1), 30.0) + random.uniform(0, 0.5)
+            delay = min(2.0 ** (attempt - 1), 30.0) + random.uniform(0, 0.5)  # noqa: S311 (retry jitter, not crypto)
         self._sleep(delay)
 
     # ---------------------------------------------------------------- repo
@@ -247,7 +248,8 @@ class GitHubClient:
         Returns:
             SHA of the new commit.
         """
-        data = self._request("POST", "/git/commits", json={"message": message, "tree": tree_sha, "parents": [parent_sha]})
+        data = self._request("POST", "/git/commits",
+                             json={"message": message, "tree": tree_sha, "parents": [parent_sha]})
         return str(data["sha"])
 
     def create_branch(self, branch: str, sha: str) -> None:
@@ -294,6 +296,15 @@ class GitHubClient:
     def add_issue_labels(self, number: int, labels: list[str]) -> None:
         """Add labels to an issue (GitHub creates labels that do not exist yet)."""
         self._request("POST", f"/issues/{number}/labels", json={"labels": labels})
+
+    def get_collaborator_permission(self, login: str) -> str:
+        """Return ``login``'s permission on the repo: ``"admin"``, ``"write"``, ``"read"`` or ``"none"``.
+
+        GitHub reports ``maintain`` as ``"write"`` and ``triage`` as ``"read"``
+        here. Requires the token's Metadata (read) permission.
+        """
+        data = self._request("GET", f"/collaborators/{quote(login, safe='')}/permission", allow_404=True)
+        return str(data.get("permission", "none")) if data else "none"
 
     def remove_issue_label(self, number: int, label: str) -> None:
         """Remove a label from an issue; does nothing if the label is not there."""

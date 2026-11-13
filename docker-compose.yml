@@ -1,0 +1,25 @@
+# Local deployment of the AutoForge webhook service.
+#   docker compose up -d --build
+# GitHub reaches it through a tunnel (smee.io or ngrok); see docs/DEPLOYMENT.md.
+services:
+  autoforge:
+    build: .
+    image: autoforge:local
+    env_file: .env                      # OPENAI_*, GITHUB_*, GITHUB_WEBHOOK_SECRET, ...
+    environment:
+      CHECKPOINT_DB: /data/checkpoints.sqlite
+      JOBS_DB: /data/jobs.sqlite
+    ports:
+      - "127.0.0.1:8080:8080"           # only reachable from this machine (and the tunnel)
+    volumes:
+      - autoforge-data:/data            # job queue + LangGraph checkpoints survive restarts
+    restart: unless-stopped
+    read_only: true                     # hardening: only /data and /tmp are writable
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  autoforge-data:

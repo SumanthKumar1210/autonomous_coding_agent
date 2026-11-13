@@ -1,0 +1,19 @@
+# Keep secrets, local state and dev clutter out of the build context.
+.env
+.autoforge/
+.git/
+.github/
+.venv/
+venv/
+.idea/
+.vscode/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info
+build/
+dist/
+tests/
+docs/

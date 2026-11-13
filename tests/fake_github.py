@@ -33,6 +33,7 @@ class FakeGitHub:
         self.created_commits: list[dict[str, Any]] = []
         self.calls: list[tuple[str, str]] = []
         self.fail: dict[tuple[str, str], int] = {}  # (method, path-regex) -> status to return
+        self.permissions: dict[str, str] = {"maintainer": "write", "owner": "admin", "visitor": "read"}
 
     def add_issue(self, number: int, title: str = "Add feature", body: str = "Please add it", **extra: Any) -> None:
         """Create open issue ``number``; ``extra`` adds/overrides fields (e.g. ``pull_request=...``)."""
@@ -66,10 +67,9 @@ class FakeGitHub:
 
         if method == "GET" and path == "":
             return ok({"default_branch": "main"})
-        if m := re.fullmatch(r"/git/ref/heads/(.+)", path):
-            if method == "GET":
-                sha = self.refs.get(m[1])
-                return ok({"object": {"sha": sha}}) if sha else httpx.Response(404, json={"message": "Not Found"})
+        if method == "GET" and (m := re.fullmatch(r"/git/ref/heads/(.+)", path)):
+            sha = self.refs.get(m[1])
+            return ok({"object": {"sha": sha}}) if sha else httpx.Response(404, json={"message": "Not Found"})
         if method == "PATCH" and (m := re.fullmatch(r"/git/refs/heads/(.+)", path)):
             self.refs[m[1]] = body["sha"]
             return ok({})
@@ -117,6 +117,10 @@ class FakeGitHub:
                 labels.remove(m[2])
                 return ok([])
             return httpx.Response(404, json={"message": "Label does not exist"})
+        if method == "GET" and (m := re.fullmatch(r"/collaborators/([^/]+)/permission", path)):
+            if m[1] not in self.permissions:
+                return httpx.Response(404, json={"message": "Not Found"})
+            return ok({"permission": self.permissions[m[1]], "user": {"login": m[1]}})
         if method == "PUT" and re.fullmatch(r"/pulls/\d+/merge", path):
             raise AssertionError("AutoForge must never merge a pull request")
         return httpx.Response(501, json={"message": f"fake: unhandled {method} {path}"})

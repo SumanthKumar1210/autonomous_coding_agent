@@ -25,6 +25,7 @@ from autoforge.app.config import Settings
 from autoforge.integrations.github.client import GitHubClient
 from autoforge.integrations.github.issues import GitHubIssuesSource
 from autoforge.integrations.github.repo import GitHubRepoHost
+from autoforge.integrations.sqlite.job_store import SqliteJobStore
 from autoforge.workflow.graph import checkpoint_serializer
 from autoforge.workflow.pipeline import Dependencies, WorkflowConfig
 
@@ -38,6 +39,16 @@ def workflow_config(settings: Settings) -> WorkflowConfig:
         max_attempts=settings.max_attempts,
         require_approval=settings.require_approval,
     )
+
+
+@contextmanager
+def build_job_store(settings: Settings) -> Iterator[SqliteJobStore]:
+    """Open the job queue database (``JOBS_DB``) and close it afterwards."""
+    store = SqliteJobStore(settings.jobs_db)
+    try:
+        yield store
+    finally:
+        store.close()
 
 
 @contextmanager

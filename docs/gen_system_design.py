@@ -76,7 +76,7 @@ add('<text x="40" y="64" class="h2">Hexagonal architecture · deterministic tool
 EX, EW = 1220, 260
 block(EX, 76, EW, 52, "Engineer", ["writes ticket · reviews & merges PR"], "actor", rx=26)
 add(f'<text x="{EX}" y="172" class="bt">EXTERNAL SYSTEMS</text>')
-block(EX, 190, EW, 64, "GitHub Webhooks", ["issues.labeled events"], "ext")
+block(EX, 190, EW, 64, "GitHub Webhooks", ["issues · issue_comment events"], "ext")
 block(EX, 790, EW, 64, "GitHub REST API", ["Issues · Git Data · Pulls"], "ext")
 block(EX, 875, EW, 50, "OpenAI Responses API", ["structured outputs"], "ext")
 block(EX, 935, EW, 46, "Jira Cloud API", [], "ext")
@@ -86,18 +86,19 @@ block(EX, 991, EW, 46, "Container runtime", [], "ext")
 band(40, 150, 1120, 130, "app/  —  entry points & composition root")
 block(60, 190, 195, 64, "config.py", ["Settings · SecretStr"])
 block(280, 190, 195, 64, "wiring.py", ["build_dependencies()"])
-block(500, 190, 195, 64, "cli.py", ["run <issue> · resume <run_id>"])
-block(720, 190, 195, 64, "Run queue / worker", ["dedupe by delivery ID"], "next")
-block(940, 190, 195, 64, "webhook.py", ["HMAC · actor permission check"], "next")
+block(500, 190, 195, 64, "cli.py", ["serve · run · resume"])
+block(720, 190, 195, 64, "Docker · CI", ["container · GitHub Actions"])
+block(940, 190, 195, 64, "webhook.py  (FastAPI)", ["HMAC · dedupe · enqueue"])
 path("M255,222 H278")
-path("M940,222 H917", "dashed")
-path("M817,254 V268 H377 V256", "dashed")
+path("M1037,254 V268 H377 V256")
 path("M597,254 V268", "solid", marker=None)
-path(f"M{EX},222 H1137", "dashed")
+path(f"M{EX},222 H1137")
 
 # ---------------- band B: workflow ----------------
 band(40, 310, 1120, 130, "workflow/  —  orchestration")
-block(60, 350, 400, 64, "pipeline.py", ["run_ticket() · resume_run() · idempotency", "ticket feedback (comments · status labels)"])
+block(60, 350, 170, 64, "worker.py", ["authorize → run / resume", "background thread"])
+block(250, 350, 210, 64, "pipeline.py", ["run_ticket · resume_run", "ticket feedback"])
+path("M230,382 H248")
 block(500, 350, 400, 64, "graph.py  (LangGraph)", ["prepare → code ⇄ review → (approve) → publish", "uses agents/context.py · domain/policy.py"])
 block(940, 350, 195, 64, "Checkpoint store", ["SQLite · thread = run_id"])
 path("M320,254 V348", label="Dependencies", lx=328, ly=300, anchor="start")
@@ -106,39 +107,43 @@ add('<text x="480" y="372" class="lbl" text-anchor="middle">runs</text>')
 path("M900,382 H938")
 
 # bus to ports
-path("M260,414 V460", marker=None)
+path("M150,414 V460", marker=None)
+path("M355,414 V460", marker=None)
 path("M700,414 V460", marker=None)
 path("M150,460 H1060", marker=None)
-for cx in (150, 380, 700, 880, 1060):
+for cx in (150, 380, 540, 700, 880, 1060):
     path(f"M{cx},460 V513")
 add('<text x="540" y="454" class="lbl" text-anchor="middle">workflow calls ports only — never concrete integrations</text>')
 
 # ---------------- band C: ports ----------------
-band(40, 480, 1120, 120, "ports.py", tx=540, anchor="middle", ty=598 - 8)
+band(40, 480, 1120, 120, "ports.py", tx=1146, anchor="end", ty=598 - 8)
 port(70, 515, 160, 60, "Coder", "generate()")
 port(300, 515, 160, 60, "Reviewer", "review()")
 port(620, 515, 160, 60, "TicketSource", "get · comment · status")
 port(800, 515, 160, 60, "RepoHost", "read · publish · PR")
-port(980, 515, 160, 60, "Verifier", "verify()", "planned")
+port(980, 515, 160, 60, "Verifier", "verify()", "next")
+port(470, 515, 140, 60, "JobStore", "queue · runs")
 
 # ---------------- band D: agents | integrations ----------------
 band(40, 630, 540, 250, "agents/  —  LLM roles", ty=870)
-band(600, 630, 560, 250, "integrations/  —  adapters", tx=1146, anchor="end", ty=870)
+band(600, 630, 560, 250, "integrations/  —  adapters", tx=614, anchor="start", ty=870)
 block(60, 670, 180, 64, "coder.py", ["OpenAICoder"])
 block(300, 670, 160, 64, "reviewer.py", ["OpenAIReviewer · verdict"])
 block(60, 785, 125, 60, "context.py", ["repo snapshot"])
 block(195, 785, 125, 60, "prompts.py", ["coder + reviewer"])
 block(330, 785, 115, 60, "llm.py", ["structured_call"])
-block(455, 785, 115, 60, "languages/", ["Python · C rules"], "planned")
+block(455, 785, 115, 60, "languages/", ["Python · C rules"], "next")
 
 block(620, 670, 160, 64, "github/issues.py", ["GitHubIssuesSource"])
 block(800, 670, 160, 64, "github/repo.py", ["GitHubRepoHost"])
-block(980, 670, 160, 64, "sandbox/", ["ContainerVerifier"], "planned")
-block(620, 785, 160, 60, "jira/", ["implements TicketSource"], "planned")
+block(980, 670, 160, 64, "sandbox/", ["ContainerVerifier"], "next")
+block(620, 785, 160, 60, "sqlite/job_store.py", ["SqliteJobStore"])
+block(980, 785, 160, 60, "jira/", ["implements TicketSource"], "planned")
+path("M620,815 H590 V600 H540 V578", "impl", marker="tri")  # job_store implements JobStore
 block(800, 785, 160, 60, "github/client.py", ["retries · no merge"])
 
 # implements (adapter -> port)
-for cx, kind in ((150, "built"), (380, "built"), (700, "built"), (880, "built"), (1060, "planned")):
+for cx, kind in ((150, "built"), (380, "built"), (700, "built"), (880, "built"), (1060, "next")):
     path(f"M{cx},668 V578", "impl", marker="tri")
 add('<text x="160" y="628" class="lbl" text-anchor="start">implements</text>')
 
@@ -151,19 +156,19 @@ path("M880,734 V783")
 
 # to external systems
 path(f"M387,845 V900 H{EX - 2}", label="responses.parse (coder + reviewer)", lx=540, ly=894)
-path(f"M960,815 H{EX - 2}", label="HTTPS", lx=1090, ly=809)
-path(f"M700,845 V958 H{EX - 2}", "dashed")
+path(f"M960,800 H970 V760 H1205 V815 H{EX - 2}", label="HTTPS", lx=1090, ly=754)
+path(f"M1060,845 V958 H{EX - 2}", "dashed")
 path(f"M1140,702 H1190 V1014 H{EX - 2}", "dashed")
 
 # engineer flows
 path(f"M{EX},102 H597 V188", label="dev / re-run", lx=900, ly=96)
 path(f"M{EX + EW},102 H1505 V822 H{EX + EW + 2}")
 add('<text x="1520" y="460" class="lbl" text-anchor="middle" transform="rotate(90 1520 460)">labels issue · reviews &amp; merges PR</text>')
-path(f"M1350,790 V256", label="issues.labeled", lx=1358, ly=520, anchor="start")
+path("M1350,790 V256", label="webhook events", lx=1358, ly=520, anchor="start")
 
 # ---------------- domain ----------------
 band(40, 1050, 1120, 110, "domain/  —  pure core (no I/O)")
-block(60, 1082, 360, 60, "models.py", ["Ticket · RepoSnapshot · PullRequest", "CodeChange · ReviewVerdict · Revision"])
+block(60, 1082, 360, 60, "models.py", ["Ticket · RepoSnapshot · Trigger · Job", "CodeChange · ReviewVerdict · Revision"])
 block(440, 1082, 360, 60, "policy.py", ["validate_change · assert_writable_branch"])
 block(820, 1082, 320, 60, "errors.py", ["TicketError · SafetyError", "AgentError · ReviewRejectedError"])
 path("M24,215 V1048", label="", marker="arrow")
@@ -173,12 +178,12 @@ add('<text x="1146" y="1068" class="lbl" text-anchor="end">← github/repo.py en
 # ---------------- cross-cutting ----------------
 band(40, 1180, 1120, 92, "cross-cutting")
 block(60, 1206, 530, 54, "observability.py", ["JSON logs · run_id context · token usage — used by all layers"])
-block(610, 1206, 530, 54, "evals/", ["sample tickets · quality scoring of agents"], "planned")
+block(610, 1206, 530, 54, "evals/", ["sample tickets · quality scoring of agents"], "next")
 
 # ---------------- legend ----------------
 ly = 1300
-items = [("built", "Built (Phase 1.1–1.2)"), ("next", "Next (1.3 webhook · Docker · CI)"),
-         ("planned", "Planned (1.4 / later)"), ("ext", "External system"), ("actor", "Actor")]
+items = [("built", "Built (Phase 1.1–1.3)"), ("next", "Next (1.4 context · C · verify · evals)"),
+         ("planned", "Planned (later)"), ("ext", "External system"), ("actor", "Actor")]
 x = 40
 for kind, text in items:
     fill, stroke, dash = STYLE[kind]

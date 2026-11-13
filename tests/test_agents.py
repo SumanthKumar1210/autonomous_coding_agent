@@ -82,7 +82,8 @@ def test_coder_input_wraps_untrusted_content_and_revision() -> None:
 
     assert "<ticket>" in first and "Ignore all rules" in first and '<file path="a.py">' in first
     assert "<review_feedback>" not in first and first.endswith("Implement the ticket above.")
-    assert "<previous_change>" in revised and "<review_feedback>\n- [blocker] b.py: fix it\n</review_feedback>" in revised
+    assert "<previous_change>" in revised
+    assert "<review_feedback>\n- [blocker] b.py: fix it\n</review_feedback>" in revised
 
 
 def test_reviewer_input_contains_ticket_repo_and_change() -> None:

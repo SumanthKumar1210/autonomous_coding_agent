@@ -10,16 +10,21 @@ import pytest
 PKG = Path(__file__).resolve().parents[1] / "src" / "autoforge"
 
 # layer -> imports it must never make (prefix match on the imported module)
+# Web framework and storage drivers belong to the edges: the HTTP service lives in app/, SQLite adapters in
+# integrations/ (the LangGraph SQLite checkpointer is created in app/wiring.py).
+_WEB = ("fastapi", "starlette", "uvicorn")
+_STORAGE = ("sqlite3", "langgraph.checkpoint.sqlite")
+
 FORBIDDEN: dict[str, tuple[str, ...]] = {
     "domain": ("autoforge.ports", "autoforge.agents", "autoforge.workflow", "autoforge.integrations",
-               "autoforge.app", "openai", "httpx", "langgraph"),
+               "autoforge.app", "openai", "httpx", "langgraph", *_WEB, *_STORAGE),
     "ports": ("autoforge.agents", "autoforge.workflow", "autoforge.integrations", "autoforge.app", "openai", "httpx",
-              "langgraph"),
-    "agents": ("autoforge.workflow", "autoforge.integrations", "autoforge.app", "httpx", "langgraph"),
+              "langgraph", *_WEB, *_STORAGE),
+    "agents": ("autoforge.workflow", "autoforge.integrations", "autoforge.app", "httpx", "langgraph", *_WEB, *_STORAGE),
     # The workflow may use LangGraph and the deterministic context builder, but never a concrete LLM agent.
     "workflow": ("autoforge.integrations", "autoforge.app", "autoforge.agents.coder", "autoforge.agents.reviewer",
-                 "autoforge.agents.llm", "openai", "httpx"),
-    "integrations": ("autoforge.workflow", "autoforge.app", "autoforge.agents", "openai", "langgraph"),
+                 "autoforge.agents.llm", "openai", "httpx", *_WEB, *_STORAGE),
+    "integrations": ("autoforge.workflow", "autoforge.app", "autoforge.agents", "openai", "langgraph", *_WEB),
 }
 
 

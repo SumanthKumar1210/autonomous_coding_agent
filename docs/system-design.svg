@@ -26,7 +26,7 @@
 <text x="1220" y="172" class="bt">EXTERNAL SYSTEMS</text>
 <rect x="1220" y="190" width="260" height="64" rx="8" fill="#ddf4ff" stroke="#0969da" stroke-width="1.6"/>
 <text x="1350.0" y="219.0" class="t">GitHub Webhooks</text>
-<text x="1350.0" y="235.0" class="s">issues.labeled events</text>
+<text x="1350.0" y="235.0" class="s">issues · issue_comment events</text>
 <rect x="1220" y="790" width="260" height="64" rx="8" fill="#ddf4ff" stroke="#0969da" stroke-width="1.6"/>
 <text x="1350.0" y="819.0" class="t">GitHub REST API</text>
 <text x="1350.0" y="835.0" class="s">Issues · Git Data · Pulls</text>
@@ -47,24 +47,28 @@
 <text x="377.5" y="235.0" class="s">build_dependencies()</text>
 <rect x="500" y="190" width="195" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="597.5" y="219.0" class="t">cli.py</text>
-<text x="597.5" y="235.0" class="s">run &lt;issue&gt; · resume &lt;run_id&gt;</text>
-<rect x="720" y="190" width="195" height="64" rx="8" fill="#fff4cc" stroke="#bf8700" stroke-width="1.6"/>
-<text x="817.5" y="219.0" class="t">Run queue / worker</text>
-<text x="817.5" y="235.0" class="s">dedupe by delivery ID</text>
-<rect x="940" y="190" width="195" height="64" rx="8" fill="#fff4cc" stroke="#bf8700" stroke-width="1.6"/>
-<text x="1037.5" y="219.0" class="t">webhook.py</text>
-<text x="1037.5" y="235.0" class="s">HMAC · actor permission check</text>
+<text x="597.5" y="235.0" class="s">serve · run · resume</text>
+<rect x="720" y="190" width="195" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
+<text x="817.5" y="219.0" class="t">Docker · CI</text>
+<text x="817.5" y="235.0" class="s">container · GitHub Actions</text>
+<rect x="940" y="190" width="195" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
+<text x="1037.5" y="219.0" class="t">webhook.py  (FastAPI)</text>
+<text x="1037.5" y="235.0" class="s">HMAC · dedupe · enqueue</text>
 <path d="M255,222 H278" class="ln" marker-end="url(#arrow)"/>
-<path d="M940,222 H917" class="ln dash" marker-end="url(#arrow)"/>
-<path d="M817,254 V268 H377 V256" class="ln dash" marker-end="url(#arrow)"/>
+<path d="M1037,254 V268 H377 V256" class="ln" marker-end="url(#arrow)"/>
 <path d="M597,254 V268" class="ln"/>
-<path d="M1220,222 H1137" class="ln dash" marker-end="url(#arrow)"/>
+<path d="M1220,222 H1137" class="ln" marker-end="url(#arrow)"/>
 <rect x="40" y="310" width="1120" height="130" rx="12" class="band"/>
 <text x="54" y="332" class="bt" text-anchor="start">workflow/  —  orchestration</text>
-<rect x="60" y="350" width="400" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
-<text x="260.0" y="371.0" class="t">pipeline.py</text>
-<text x="260.0" y="387.0" class="s">run_ticket() · resume_run() · idempotency</text>
-<text x="260.0" y="403.0" class="s">ticket feedback (comments · status labels)</text>
+<rect x="60" y="350" width="170" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
+<text x="145.0" y="371.0" class="t">worker.py</text>
+<text x="145.0" y="387.0" class="s">authorize → run / resume</text>
+<text x="145.0" y="403.0" class="s">background thread</text>
+<rect x="250" y="350" width="210" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
+<text x="355.0" y="371.0" class="t">pipeline.py</text>
+<text x="355.0" y="387.0" class="s">run_ticket · resume_run</text>
+<text x="355.0" y="403.0" class="s">ticket feedback</text>
+<path d="M230,382 H248" class="ln" marker-end="url(#arrow)"/>
 <rect x="500" y="350" width="400" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="700.0" y="371.0" class="t">graph.py  (LangGraph)</text>
 <text x="700.0" y="387.0" class="s">prepare → code ⇄ review → (approve) → publish</text>
@@ -77,17 +81,19 @@
 <path d="M460,382 H498" class="ln" marker-end="url(#arrow)"/>
 <text x="480" y="372" class="lbl" text-anchor="middle">runs</text>
 <path d="M900,382 H938" class="ln" marker-end="url(#arrow)"/>
-<path d="M260,414 V460" class="ln"/>
+<path d="M150,414 V460" class="ln"/>
+<path d="M355,414 V460" class="ln"/>
 <path d="M700,414 V460" class="ln"/>
 <path d="M150,460 H1060" class="ln"/>
 <path d="M150,460 V513" class="ln" marker-end="url(#arrow)"/>
 <path d="M380,460 V513" class="ln" marker-end="url(#arrow)"/>
+<path d="M540,460 V513" class="ln" marker-end="url(#arrow)"/>
 <path d="M700,460 V513" class="ln" marker-end="url(#arrow)"/>
 <path d="M880,460 V513" class="ln" marker-end="url(#arrow)"/>
 <path d="M1060,460 V513" class="ln" marker-end="url(#arrow)"/>
 <text x="540" y="454" class="lbl" text-anchor="middle">workflow calls ports only — never concrete integrations</text>
 <rect x="40" y="480" width="1120" height="120" rx="12" class="band"/>
-<text x="540" y="590" class="bt" text-anchor="middle">ports.py</text>
+<text x="1146" y="590" class="bt" text-anchor="end">ports.py</text>
 <polygon points="86,515 214,515 230,545.0 214,575 86,575 70,545.0" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="150.0" y="543.0" class="t">Coder</text>
 <text x="150.0" y="559.0" class="s">generate()</text>
@@ -100,13 +106,16 @@
 <polygon points="816,515 944,515 960,545.0 944,575 816,575 800,545.0" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="880.0" y="543.0" class="t">RepoHost</text>
 <text x="880.0" y="559.0" class="s">read · publish · PR</text>
-<polygon points="996,515 1124,515 1140,545.0 1124,575 996,575 980,545.0" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.6" stroke-dasharray="6 4"/>
+<polygon points="996,515 1124,515 1140,545.0 1124,575 996,575 980,545.0" fill="#fff4cc" stroke="#bf8700" stroke-width="1.6"/>
 <text x="1060.0" y="543.0" class="t">Verifier</text>
 <text x="1060.0" y="559.0" class="s">verify()</text>
+<polygon points="486,515 594,515 610,545.0 594,575 486,575 470,545.0" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
+<text x="540.0" y="543.0" class="t">JobStore</text>
+<text x="540.0" y="559.0" class="s">queue · runs</text>
 <rect x="40" y="630" width="540" height="250" rx="12" class="band"/>
 <text x="54" y="870" class="bt" text-anchor="start">agents/  —  LLM roles</text>
 <rect x="600" y="630" width="560" height="250" rx="12" class="band"/>
-<text x="1146" y="870" class="bt" text-anchor="end">integrations/  —  adapters</text>
+<text x="614" y="870" class="bt" text-anchor="start">integrations/  —  adapters</text>
 <rect x="60" y="670" width="180" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="150.0" y="699.0" class="t">coder.py</text>
 <text x="150.0" y="715.0" class="s">OpenAICoder</text>
@@ -122,7 +131,7 @@
 <rect x="330" y="785" width="115" height="60" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="387.5" y="812.0" class="t">llm.py</text>
 <text x="387.5" y="828.0" class="s">structured_call</text>
-<rect x="455" y="785" width="115" height="60" rx="8" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.6" stroke-dasharray="6 4"/>
+<rect x="455" y="785" width="115" height="60" rx="8" fill="#fff4cc" stroke="#bf8700" stroke-width="1.6"/>
 <text x="512.5" y="812.0" class="t">languages/</text>
 <text x="512.5" y="828.0" class="s">Python · C rules</text>
 <rect x="620" y="670" width="160" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
@@ -131,12 +140,16 @@
 <rect x="800" y="670" width="160" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="880.0" y="699.0" class="t">github/repo.py</text>
 <text x="880.0" y="715.0" class="s">GitHubRepoHost</text>
-<rect x="980" y="670" width="160" height="64" rx="8" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.6" stroke-dasharray="6 4"/>
+<rect x="980" y="670" width="160" height="64" rx="8" fill="#fff4cc" stroke="#bf8700" stroke-width="1.6"/>
 <text x="1060.0" y="699.0" class="t">sandbox/</text>
 <text x="1060.0" y="715.0" class="s">ContainerVerifier</text>
-<rect x="620" y="785" width="160" height="60" rx="8" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text x="700.0" y="812.0" class="t">jira/</text>
-<text x="700.0" y="828.0" class="s">implements TicketSource</text>
+<rect x="620" y="785" width="160" height="60" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
+<text x="700.0" y="812.0" class="t">sqlite/job_store.py</text>
+<text x="700.0" y="828.0" class="s">SqliteJobStore</text>
+<rect x="980" y="785" width="160" height="60" rx="8" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="1060.0" y="812.0" class="t">jira/</text>
+<text x="1060.0" y="828.0" class="s">implements TicketSource</text>
+<path d="M620,815 H590 V600 H540 V578" class="ln impl" marker-end="url(#tri)"/>
 <rect x="800" y="785" width="160" height="60" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="880.0" y="812.0" class="t">github/client.py</text>
 <text x="880.0" y="828.0" class="s">retries · no merge</text>
@@ -153,21 +166,21 @@
 <path d="M880,734 V783" class="ln" marker-end="url(#arrow)"/>
 <path d="M387,845 V900 H1218" class="ln" marker-end="url(#arrow)"/>
 <text x="540" y="894" class="lbl" text-anchor="middle">responses.parse (coder + reviewer)</text>
-<path d="M960,815 H1218" class="ln" marker-end="url(#arrow)"/>
-<text x="1090" y="809" class="lbl" text-anchor="middle">HTTPS</text>
-<path d="M700,845 V958 H1218" class="ln dash" marker-end="url(#arrow)"/>
+<path d="M960,800 H970 V760 H1205 V815 H1218" class="ln" marker-end="url(#arrow)"/>
+<text x="1090" y="754" class="lbl" text-anchor="middle">HTTPS</text>
+<path d="M1060,845 V958 H1218" class="ln dash" marker-end="url(#arrow)"/>
 <path d="M1140,702 H1190 V1014 H1218" class="ln dash" marker-end="url(#arrow)"/>
 <path d="M1220,102 H597 V188" class="ln" marker-end="url(#arrow)"/>
 <text x="900" y="96" class="lbl" text-anchor="middle">dev / re-run</text>
 <path d="M1480,102 H1505 V822 H1482" class="ln" marker-end="url(#arrow)"/>
 <text x="1520" y="460" class="lbl" text-anchor="middle" transform="rotate(90 1520 460)">labels issue · reviews &amp; merges PR</text>
 <path d="M1350,790 V256" class="ln" marker-end="url(#arrow)"/>
-<text x="1358" y="520" class="lbl" text-anchor="start">issues.labeled</text>
+<text x="1358" y="520" class="lbl" text-anchor="start">webhook events</text>
 <rect x="40" y="1050" width="1120" height="110" rx="12" class="band"/>
 <text x="54" y="1072" class="bt" text-anchor="start">domain/  —  pure core (no I/O)</text>
 <rect x="60" y="1082" width="360" height="60" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="240.0" y="1101.0" class="t">models.py</text>
-<text x="240.0" y="1117.0" class="s">Ticket · RepoSnapshot · PullRequest</text>
+<text x="240.0" y="1117.0" class="s">Ticket · RepoSnapshot · Trigger · Job</text>
 <text x="240.0" y="1133.0" class="s">CodeChange · ReviewVerdict · Revision</text>
 <rect x="440" y="1082" width="360" height="60" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="620.0" y="1109.0" class="t">policy.py</text>
@@ -184,23 +197,23 @@
 <rect x="60" y="1206" width="530" height="54" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="325.0" y="1230.0" class="t">observability.py</text>
 <text x="325.0" y="1246.0" class="s">JSON logs · run_id context · token usage — used by all layers</text>
-<rect x="610" y="1206" width="530" height="54" rx="8" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.6" stroke-dasharray="6 4"/>
+<rect x="610" y="1206" width="530" height="54" rx="8" fill="#fff4cc" stroke="#bf8700" stroke-width="1.6"/>
 <text x="875.0" y="1230.0" class="t">evals/</text>
 <text x="875.0" y="1246.0" class="s">sample tickets · quality scoring of agents</text>
 <rect x="40" y="1300" width="26" height="16" rx="4" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.5"/>
-<text x="74" y="1313" font-size="12" fill="#1f2328">Built (Phase 1.1–1.2)</text>
+<text x="74" y="1313" font-size="12" fill="#1f2328">Built (Phase 1.1–1.3)</text>
 <rect x="240.6" y="1300" width="26" height="16" rx="4" fill="#fff4cc" stroke="#bf8700" stroke-width="1.5"/>
-<text x="274.6" y="1313" font-size="12" fill="#1f2328">Next (1.3 webhook · Docker · CI)</text>
-<rect x="513.8" y="1300" width="26" height="16" rx="4" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
-<text x="547.8" y="1313" font-size="12" fill="#1f2328">Planned (1.4 / later)</text>
-<rect x="714.4" y="1300" width="26" height="16" rx="4" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
-<text x="748.4" y="1313" font-size="12" fill="#1f2328">External system</text>
-<rect x="875.4" y="1300" width="26" height="16" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
-<text x="909.4" y="1313" font-size="12" fill="#1f2328">Actor</text>
-<path d="M970.4,1308 H1006.4" class="ln" marker-end="url(#arrow)"/>
-<text x="1014.4" y="1313" font-size="12" fill="#1f2328">call / data flow</text>
-<path d="M1120.4,1308 H1156.4" class="ln dash" marker-end="url(#arrow)"/>
-<text x="1164.4" y="1313" font-size="12" fill="#1f2328">planned flow</text>
-<path d="M1250.4,1308 H1286.4" class="ln impl" marker-end="url(#tri)"/>
-<text x="1294.4" y="1313" font-size="12" fill="#1f2328">implements port</text>
+<text x="274.6" y="1313" font-size="12" fill="#1f2328">Next (1.4 context · C · verify · evals)</text>
+<rect x="560.0" y="1300" width="26" height="16" rx="4" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="594.0" y="1313" font-size="12" fill="#1f2328">Planned (later)</text>
+<rect x="721.0" y="1300" width="26" height="16" rx="4" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
+<text x="755.0" y="1313" font-size="12" fill="#1f2328">External system</text>
+<rect x="882.0" y="1300" width="26" height="16" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
+<text x="916.0" y="1313" font-size="12" fill="#1f2328">Actor</text>
+<path d="M977.0,1308 H1013.0" class="ln" marker-end="url(#arrow)"/>
+<text x="1021.0" y="1313" font-size="12" fill="#1f2328">call / data flow</text>
+<path d="M1127.0,1308 H1163.0" class="ln dash" marker-end="url(#arrow)"/>
+<text x="1171.0" y="1313" font-size="12" fill="#1f2328">planned flow</text>
+<path d="M1257.0,1308 H1293.0" class="ln impl" marker-end="url(#tri)"/>
+<text x="1301.0" y="1313" font-size="12" fill="#1f2328">implements port</text>
 </svg>

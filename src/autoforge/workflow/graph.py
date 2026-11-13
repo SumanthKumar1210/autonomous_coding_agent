@@ -37,7 +37,7 @@ from typing import Any, Literal, TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, interrupt
 
@@ -134,6 +134,12 @@ class GraphSettings:
     require_approval: bool
 
 
+AgentGraph = CompiledStateGraph[Any, Any, Any, Any]
+"""The compiled agent graph returned by ``build_graph``."""
+
+Checkpointer = BaseCheckpointSaver[Any]
+"""Any LangGraph checkpoint saver (SQLite in production, in-memory in tests)."""
+
 PrBodyBuilder = Callable[[RunState], str]
 """Function that builds the PR description (supplied by the pipeline)."""
 
@@ -143,10 +149,10 @@ def build_graph(
     repo: RepoHost,
     coder: Coder,
     reviewer: Reviewer,
-    checkpointer: BaseCheckpointSaver,
+    checkpointer: Checkpointer,
     settings: GraphSettings,
     pr_body: PrBodyBuilder,
-) -> CompiledStateGraph:
+) -> AgentGraph:
     """Build and compile the agent graph.
 
     Args:
@@ -222,7 +228,7 @@ def build_graph(
             log.info("change approved by human")
             return Command(goto="publish")
         log.info("change rejected by human")
-        return Command(goto=END, update={"human_rejected": True})
+        return Command(goto="__end__", update={"human_rejected": True})
 
     def publish(state: RunState) -> Command[Literal["__end__"]]:
         """Commit the change to the agent branch and open the pull request."""
@@ -230,7 +236,7 @@ def build_graph(
         commit_sha = repo.publish(snapshot, state["branch"], change)
         pr = repo.open_pull(title=change.pr_title, body=pr_body(state), head=state["branch"],
                             base=snapshot.default_branch)
-        return Command(goto=END, update={"pr": pr, "commit_sha": commit_sha})
+        return Command(goto="__end__", update={"pr": pr, "commit_sha": commit_sha})
 
     graph = StateGraph(RunState)
     graph.add_node("prepare", prepare)

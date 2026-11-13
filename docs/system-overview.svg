@@ -11,7 +11,7 @@
 <text x="140.0" y="252" font-size="12.5" fill="#424a53" text-anchor="middle">GitHub Issue + label</text>
 <rect x="290" y="104" width="760" height="300" rx="18" fill="#f6faff" stroke="#0969da" stroke-width="2.5"/>
 <text x="310" y="134" font-size="18" font-weight="800" fill="#0969da">AutoForge</text>
-<text x="412" y="134" font-size="13" fill="#57606a">agentic coding pipeline</text>
+<text x="412" y="134" font-size="13" fill="#57606a">webhook service · agent pipeline · runs in a container</text>
 <rect x="310" y="172" width="132" height="132" rx="12" fill="#d4f7dc" stroke="#1a7f37" stroke-width="2"/>
 <circle cx="332" cy="194" r="13" fill="#1a7f37"/>
 <text x="332" y="199" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">2</text>
@@ -78,6 +78,7 @@
 <text x="1345" y="332" font-size="11.5" fill="#57606a" text-anchor="middle">AutoForge can never merge</text>
 <path d="M240,215 H288" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
 <text x="264" y="207" font-size="12" font-style="italic" fill="#57606a" text-anchor="middle">label</text>
+<text x="264" y="236" font-size="11" font-style="italic" fill="#57606a" text-anchor="middle">webhook</text>
 <path d="M1050,215 H1098" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
 <path d="M1240,215 H1278" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>
 <path d="M1170,280 V570 H140 V282" fill="none" stroke="#424a53" stroke-width="2" marker-end="url(#a)"/>

@@ -10,12 +10,9 @@ GitHub pull request → PR link commented back on the issue (human merges).
 Deployed as a service. See `CLAUDE.md` for exact scope. Increments:
 1. ✅ Core pipeline: issue number (CLI) → coder → GitHub PR → issue comment.
 2. ✅ LangGraph orchestration + reviewer/critic loop + checkpoints / HITL interrupt.
-3. GitHub webhook service, idempotency, Docker deployment, CI.
-   - Carry over from 1.2: a ticket re-triggered while a run is paused for
-     approval (`autoforge:awaiting-approval`) currently starts a new run; the
-     webhook's dedupe must treat a paused run like an open PR.
-   - Carry over from 1.2: checkpoints are a local SQLite file; a deployed
-     service needs a persistent volume or a Postgres checkpointer.
+3. ✅ GitHub webhook service, idempotency, Docker deployment, CI.
+   (Both 1.2 carry-overs are resolved: a re-label while a run awaits approval is
+   skipped, and checkpoints + job queue live on the container's `/data` volume.)
 4. Repo-context retrieval, C support (alongside Python), pre-PR verification
    with existing repo checks, evaluation harness (measure reviewer lift).
 
@@ -42,3 +39,10 @@ No Jira access yet. When available, add Jira Cloud as a second `TicketSource`
 ## Parking lot
 Ideas that come up mid-build but belong to a later phase — note them here instead
 of implementing them now.
+
+- **GitHub App authentication** (CLAUDE.md prefers it over a fine-grained PAT):
+  short-lived installation tokens, per-repo installation, bot identity on PRs.
+- **Cloud deployment**: same image on a managed container platform with a
+  persistent `/data` volume and a secret store; Postgres checkpointer and job
+  queue if more than one replica is ever needed.
+- **Multiple target repos** from one service (route webhooks by repository).

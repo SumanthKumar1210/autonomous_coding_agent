@@ -57,7 +57,7 @@ box(40, 150, 200, 130, "Engineer", ["writes a ticket", "GitHub Issue + label"], 
 # ---- AutoForge container ----
 add('<rect x="290" y="104" width="760" height="300" rx="18" fill="#f6faff" stroke="#0969da" stroke-width="2.5"/>')
 add('<text x="310" y="134" font-size="18" font-weight="800" fill="#0969da">AutoForge</text>')
-add('<text x="412" y="134" font-size="13" fill="#57606a">agentic coding pipeline</text>')
+add('<text x="412" y="134" font-size="13" fill="#57606a">webhook service · agent pipeline · runs in a container</text>')
 
 steps = [
     ("Understand", ["reads the ticket", "+ repository code"], "green", None, False),
@@ -96,6 +96,7 @@ add('<text x="1345" y="332" font-size="11.5" fill="#57606a" text-anchor="middle"
 
 # main flow arrows
 arrow("M240,215 H288", "label", 264, 207)
+add('<text x="264" y="236" font-size="11" font-style="italic" fill="#57606a" text-anchor="middle">webhook</text>')
 arrow("M1050,215 H1098")
 arrow("M1240,215 H1278")
 # status back to ticket

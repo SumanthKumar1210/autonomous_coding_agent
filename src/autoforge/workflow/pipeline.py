@@ -27,16 +27,22 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
 from autoforge.domain.errors import ReviewRejectedError
 from autoforge.domain.models import TicketStatus
 from autoforge.observability import run_context
 from autoforge.ports import Coder, RepoHost, Reviewer, TicketSource
-from autoforge.workflow.graph import GraphSettings, RunState, build_graph, checkpoint_serializer
+from autoforge.workflow.graph import (
+    AgentGraph,
+    Checkpointer,
+    GraphSettings,
+    RunState,
+    build_graph,
+    checkpoint_serializer,
+)
 
 log = logging.getLogger(__name__)
 
@@ -111,7 +117,7 @@ class Dependencies:
     repo: RepoHost
     coder: Coder
     reviewer: Reviewer
-    checkpointer: BaseCheckpointSaver = field(default_factory=lambda: InMemorySaver(serde=checkpoint_serializer()))
+    checkpointer: Checkpointer = field(default_factory=lambda: InMemorySaver(serde=checkpoint_serializer()))
 
 
 def branch_for(ticket_key: str, prefix: str) -> str:
@@ -192,9 +198,18 @@ def resume_run(run_id: str, approved: bool, deps: Dependencies, config: Workflow
                       lambda g, cfg: g.invoke(Command(resume={"approved": approved}), cfg))
 
 
+def is_awaiting_approval(run_id: str, deps: Dependencies, config: WorkflowConfig) -> bool:
+    """Return True if run ``run_id`` is currently paused at the human approval gate.
+
+    The checkpoint is the source of truth: a run already resumed (e.g. from
+    the CLI) is no longer paused, whatever the job queue last recorded.
+    """
+    return "approve" in _graph(deps, config).get_state(_thread(run_id)).next
+
+
 # ----------------------------------------------------------------- internals
 
-Invoker = Callable[[CompiledStateGraph, dict[str, Any]], Any]
+Invoker = Callable[[AgentGraph, RunnableConfig], Any]
 """Starts or resumes the graph: ``(graph, config) -> final state``."""
 
 
@@ -226,7 +241,8 @@ def _drive(key: str, run_id: str, deps: Dependencies, config: WorkflowConfig, in
         _safe_feedback(deps.tickets, key, TicketStatus.AWAITING_APPROVAL,
                        f"AutoForge's change passed automated review and is waiting for approval.\n\n"
                        f"{state['change'].summary}\n\n{_file_list(state)}\n\n"
-                       f"Approve: `autoforge resume {run_id}` · Reject: `autoforge resume {run_id} --reject`\n\n"
+                       f"A maintainer can comment `/autoforge approve` to open the pull request or "
+                       f"`/autoforge reject` to discard the change (CLI: `autoforge resume {run_id}`).\n\n"
                        f"Run ID: `{run_id}`")
         return RunResult(run_id, RunOutcome.AWAITING_APPROVAL)
 
@@ -247,7 +263,7 @@ def _drive(key: str, run_id: str, deps: Dependencies, config: WorkflowConfig, in
     return RunResult(run_id, RunOutcome.PR_OPENED, pr_url=pr.url)
 
 
-def _graph(deps: Dependencies, config: WorkflowConfig) -> CompiledStateGraph:
+def _graph(deps: Dependencies, config: WorkflowConfig) -> AgentGraph:
     """Build the agent graph from the dependencies and config."""
     return build_graph(
         repo=deps.repo, coder=deps.coder, reviewer=deps.reviewer, checkpointer=deps.checkpointer,
@@ -257,7 +273,7 @@ def _graph(deps: Dependencies, config: WorkflowConfig) -> CompiledStateGraph:
     )
 
 
-def _thread(run_id: str) -> dict[str, Any]:
+def _thread(run_id: str) -> RunnableConfig:
     """LangGraph run config: the run ID is the checkpoint thread ID."""
     return {"configurable": {"thread_id": run_id}}
 
@@ -280,6 +296,8 @@ def _pr_body(state: RunState) -> str:
     review = f"Approved by the AutoForge reviewer after {state['attempts']} coder attempt(s).\n\n{verdict.summary}"
     if notes:
         review += f"\n\nReviewer notes (non-blocking):\n{notes}"
+    meta = (f"AutoForge run `{state['run_id']}` · coder `{state['coder_model']}` · "
+            f"reviewer `{state['reviewer_model']}` · tokens in/out {usage.input_tokens}/{usage.output_tokens}")
     return f"""{change.pr_body}
 
 ---
@@ -294,7 +312,7 @@ Closes #{state['ticket_key'].lstrip('#')}
 > [!IMPORTANT]
 > AutoForge generated this pull request. A human must review it before it is merged.
 
-<sub>AutoForge run `{state['run_id']}` · coder `{state['coder_model']}` · reviewer `{state['reviewer_model']}` · tokens in/out {usage.input_tokens}/{usage.output_tokens}</sub>
+<sub>{meta}</sub>
 """
 
 
