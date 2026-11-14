@@ -80,7 +80,7 @@ def configure_logging(level: str = "INFO") -> None:
     Args:
         level: Minimum level to emit (``"DEBUG"``, ``"INFO"``, ``"WARNING"`` ...).
 
-    Third-party HTTP/SDK loggers (httpx, httpcore, openai) are raised to WARNING
+    Third-party HTTP/SDK loggers (httpx, httpx2, httpcore, openai) are raised to WARNING
     so request URLs and headers never end up in the logs.
     """
     handler = logging.StreamHandler(sys.stderr)
@@ -89,5 +89,6 @@ def configure_logging(level: str = "INFO") -> None:
     root.handlers[:] = [handler]
     root.setLevel(level.upper())
     # Keep third-party HTTP noise (and request URLs) out of the logs.
-    for noisy in ("httpx", "httpcore", "openai"):
+    # The openai SDK logs requests through "httpx2", not "httpx", so both are listed.
+    for noisy in ("httpx", "httpx2", "httpcore", "openai"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
