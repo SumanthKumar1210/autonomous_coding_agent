@@ -86,8 +86,12 @@ class RepoHost(Protocol):
         """List every file in the repository at ``base`` (metadata only)."""
         ...
 
-    def read_file(self, file: RepoFile) -> bytes:
-        """Download one file's raw content."""
+    def read_files(self, base: BaseRef, files: list[RepoFile]) -> dict[str, bytes]:
+        """Download the raw content of several files at ``base``.
+
+        Returns a mapping path -> bytes. Files that cannot be read (e.g. too
+        large for the host's limits) are left out rather than failing the run.
+        """
         ...
 
     def find_open_pull(self, branch: str) -> PullRequest | None:

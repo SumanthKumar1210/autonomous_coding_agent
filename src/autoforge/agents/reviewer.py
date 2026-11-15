@@ -13,7 +13,7 @@ from __future__ import annotations
 from openai import OpenAI
 
 from autoforge.agents.llm import structured_call
-from autoforge.agents.prompts import REVIEWER_SYSTEM_PROMPT, build_reviewer_input
+from autoforge.agents.prompts import build_reviewer_input, reviewer_instructions
 from autoforge.domain.models import CodeChange, RepoSnapshot, ReviewerResult, ReviewVerdict, Ticket
 
 
@@ -53,7 +53,7 @@ class OpenAIReviewer:
         verdict, usage = structured_call(
             self._client,
             model=self._model,
-            instructions=REVIEWER_SYSTEM_PROMPT,
+            instructions=reviewer_instructions(snapshot),
             input_text=build_reviewer_input(ticket, snapshot, change),
             schema=ReviewVerdict,
             max_output_tokens=self._max_output_tokens,

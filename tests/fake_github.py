@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import re
+import tarfile
 from typing import Any
 
 import httpx
@@ -34,6 +36,21 @@ class FakeGitHub:
         self.calls: list[tuple[str, str]] = []
         self.fail: dict[tuple[str, str], int] = {}  # (method, path-regex) -> status to return
         self.permissions: dict[str, str] = {"maintainer": "write", "owner": "admin", "visitor": "read"}
+        self.codeload_auth: list[str | None] = []  # Authorization header seen by the tarball host
+
+    def tarball(self) -> bytes:
+        """The repo as GitHub's tarball: files under ``acme-sandbox-<sha>/``, plus a symlink and a pax header."""
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            for path, content in self.files.items():
+                data = content.encode()
+                info = tarfile.TarInfo(f"acme-sandbox-commit-base/{path}")
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+            link = tarfile.TarInfo("acme-sandbox-commit-base/evil-link")
+            link.type, link.linkname = tarfile.SYMTYPE, "/etc/passwd"
+            tar.addfile(link)
+        return buf.getvalue()
 
     def add_issue(self, number: int, title: str = "Add feature", body: str = "Please add it", **extra: Any) -> None:
         """Create open issue ``number``; ``extra`` adds/overrides fields (e.g. ``pull_request=...``)."""
@@ -54,6 +71,10 @@ class FakeGitHub:
         Any attempt to merge a PR fails the test immediately.
         """
         method = request.method
+        if request.url.host == "codeload.github.com":  # where GitHub redirects tarball downloads
+            self.calls.append((method, "codeload"))
+            self.codeload_auth.append(request.headers.get("authorization"))
+            return httpx.Response(200, content=self.tarball())
         path = request.url.path.removeprefix(f"/repos/{REPO}")
         self.calls.append((method, path))
         for (m, pattern), status in self.fail.items():
@@ -82,6 +103,9 @@ class FakeGitHub:
             tree = [{"path": p, "mode": "100644", "type": "blob", "sha": f"blob-{p}", "size": len(c)}
                     for p, c in self.files.items()]
             return ok({"tree": tree, "truncated": False})
+        if method == "GET" and (m := re.fullmatch(r"/tarball/(.+)", path)):
+            return httpx.Response(302, headers={
+                "location": f"https://codeload.github.com/{REPO}/legacy.tar.gz/{m[1]}?token=short-lived"})
         if method == "GET" and (m := re.fullmatch(r"/git/blobs/(.+)", path)):
             return ok({"content": base64.b64encode(self.blobs[m[1]]).decode(), "encoding": "base64"})
         if method == "POST" and path == "/git/trees":

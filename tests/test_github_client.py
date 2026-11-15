@@ -68,3 +68,65 @@ def test_missing_ref_returns_none_and_sends_auth() -> None:
 def test_client_has_no_merge_capability() -> None:
     """The client exposes no merge method at all (PR-only guarantee)."""
     assert not any("merge" in name for name in dir(GitHubClient))
+
+
+# ------------------------------------------------------------------ reading many files
+
+def _many_files(n: int) -> dict[str, str]:
+    """A repo with ``n`` small Python files."""
+    return {f"src/m{i}.py": f"X = {i}\n" for i in range(n)}
+
+
+def test_many_files_are_read_from_one_tarball_in_memory() -> None:
+    """Above the blob limit, one tarball download replaces per-file reads; links in the archive are ignored."""
+    from autoforge.integrations.github.repo import BLOB_READ_LIMIT, GitHubRepoHost
+    from tests.fake_github import FakeGitHub
+
+    fake = FakeGitHub(_many_files(BLOB_READ_LIMIT + 5))
+    repo = GitHubRepoHost(fake.client(), branch_prefix="autoforge/")
+    base = repo.get_base()
+    files = repo.list_files(base)
+
+    contents = repo.read_files(base, files)
+
+    assert contents == {p: c.encode() for p, c in fake.files.items()}
+    assert "evil-link" not in contents
+    assert not any(path.startswith("/git/blobs") for _, path in fake.calls)
+    assert ("GET", "codeload") in fake.calls
+    assert fake.codeload_auth == [None]  # the token is not forwarded to the redirect host
+
+
+def test_few_files_are_read_as_blobs() -> None:
+    """Small reads use the blob API (no archive download)."""
+    from autoforge.integrations.github.repo import GitHubRepoHost
+    from tests.fake_github import FakeGitHub
+
+    fake = FakeGitHub(_many_files(3))
+    repo = GitHubRepoHost(fake.client(), branch_prefix="autoforge/")
+    base = repo.get_base()
+
+    assert len(repo.read_files(base, repo.list_files(base))) == 3
+    assert ("GET", "codeload") not in fake.calls
+
+
+def test_tarball_failure_falls_back_to_blobs() -> None:
+    """If the archive cannot be downloaded, the first files are read one by one instead of failing the run."""
+    from autoforge.integrations.github.repo import BLOB_READ_LIMIT, GitHubRepoHost
+    from tests.fake_github import FakeGitHub
+
+    fake = FakeGitHub(_many_files(BLOB_READ_LIMIT + 5))
+    fake.fail[("GET", r"/tarball/.+")] = 403
+    repo = GitHubRepoHost(fake.client(), branch_prefix="autoforge/")
+    base = repo.get_base()
+
+    assert len(repo.read_files(base, repo.list_files(base))) == BLOB_READ_LIMIT
+
+
+def test_tarball_size_limit() -> None:
+    """A download larger than the limit is aborted with a GitHubError."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        """Serve a 2 KB archive."""
+        return httpx.Response(200, content=b"x" * 2048)
+
+    with pytest.raises(GitHubError, match="exceeds 1024 bytes"):
+        _client(handler).download_tarball("abc", max_bytes=1024)

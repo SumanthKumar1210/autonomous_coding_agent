@@ -124,15 +124,15 @@
 <text x="380.0" y="715.0" class="s">OpenAIReviewer · verdict</text>
 <rect x="60" y="785" width="125" height="60" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="122.5" y="812.0" class="t">context.py</text>
-<text x="122.5" y="828.0" class="s">repo snapshot</text>
+<text x="122.5" y="828.0" class="s">ticket-driven context</text>
 <rect x="195" y="785" width="125" height="60" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="257.5" y="812.0" class="t">prompts.py</text>
 <text x="257.5" y="828.0" class="s">coder + reviewer</text>
 <rect x="330" y="785" width="115" height="60" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="387.5" y="812.0" class="t">llm.py</text>
 <text x="387.5" y="828.0" class="s">structured_call</text>
-<rect x="455" y="785" width="115" height="60" rx="8" fill="#fff4cc" stroke="#bf8700" stroke-width="1.6"/>
-<text x="512.5" y="812.0" class="t">languages/</text>
+<rect x="455" y="785" width="115" height="60" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
+<text x="512.5" y="812.0" class="t">languages.py</text>
 <text x="512.5" y="828.0" class="s">Python · C rules</text>
 <rect x="620" y="670" width="160" height="64" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="700.0" y="699.0" class="t">github/issues.py</text>
@@ -201,19 +201,19 @@
 <text x="875.0" y="1230.0" class="t">evals/</text>
 <text x="875.0" y="1246.0" class="s">sample tickets · quality scoring of agents</text>
 <rect x="40" y="1300" width="26" height="16" rx="4" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.5"/>
-<text x="74" y="1313" font-size="12" fill="#1f2328">Built (Phase 1.1–1.3)</text>
-<rect x="240.6" y="1300" width="26" height="16" rx="4" fill="#fff4cc" stroke="#bf8700" stroke-width="1.5"/>
-<text x="274.6" y="1313" font-size="12" fill="#1f2328">Next (1.4 context · C · verify · evals)</text>
-<rect x="560.0" y="1300" width="26" height="16" rx="4" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
-<text x="594.0" y="1313" font-size="12" fill="#1f2328">Planned (later)</text>
-<rect x="721.0" y="1300" width="26" height="16" rx="4" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
-<text x="755.0" y="1313" font-size="12" fill="#1f2328">External system</text>
-<rect x="882.0" y="1300" width="26" height="16" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
-<text x="916.0" y="1313" font-size="12" fill="#1f2328">Actor</text>
-<path d="M977.0,1308 H1013.0" class="ln" marker-end="url(#arrow)"/>
-<text x="1021.0" y="1313" font-size="12" fill="#1f2328">call / data flow</text>
-<path d="M1127.0,1308 H1163.0" class="ln dash" marker-end="url(#arrow)"/>
-<text x="1171.0" y="1313" font-size="12" fill="#1f2328">planned flow</text>
-<path d="M1257.0,1308 H1293.0" class="ln impl" marker-end="url(#tri)"/>
-<text x="1301.0" y="1313" font-size="12" fill="#1f2328">implements port</text>
+<text x="74" y="1313" font-size="12" fill="#1f2328">Built (Phase 1.1–1.4a)</text>
+<rect x="247.2" y="1300" width="26" height="16" rx="4" fill="#fff4cc" stroke="#bf8700" stroke-width="1.5"/>
+<text x="281.2" y="1313" font-size="12" fill="#1f2328">Next (1.4b verify · 1.4c evals)</text>
+<rect x="513.8" y="1300" width="26" height="16" rx="4" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="547.8" y="1313" font-size="12" fill="#1f2328">Planned (later)</text>
+<rect x="674.8" y="1300" width="26" height="16" rx="4" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
+<text x="708.8" y="1313" font-size="12" fill="#1f2328">External system</text>
+<rect x="835.8" y="1300" width="26" height="16" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
+<text x="869.8" y="1313" font-size="12" fill="#1f2328">Actor</text>
+<path d="M930.8,1308 H966.8" class="ln" marker-end="url(#arrow)"/>
+<text x="974.8" y="1313" font-size="12" fill="#1f2328">call / data flow</text>
+<path d="M1080.8,1308 H1116.8" class="ln dash" marker-end="url(#arrow)"/>
+<text x="1124.8" y="1313" font-size="12" fill="#1f2328">planned flow</text>
+<path d="M1210.8,1308 H1246.8" class="ln impl" marker-end="url(#tri)"/>
+<text x="1254.8" y="1313" font-size="12" fill="#1f2328">implements port</text>
 </svg>

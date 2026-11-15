@@ -33,4 +33,4 @@ def test_sandbox_repo_is_readable() -> None:
         files = repo.list_files(base)
 
         assert base.commit_sha and files
-        assert isinstance(repo.read_file(files[0]), bytes)
+        assert isinstance(repo.read_files(base, files[:1])[files[0].path], bytes)

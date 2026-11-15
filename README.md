@@ -40,7 +40,8 @@ turns a ticket into a reviewed pull request.
 | 1. Core pipeline | GitHub issue → OpenAI coder agent (structured outputs) → validated change → branch + commit → PR → issue comment/labels | ✅ Built |
 | 2. Multi-agent orchestration | **LangGraph** graph: coder ↔ reviewer/critic loop (bounded attempts, policy violations fed back to the coder), SQLite checkpoints, optional human-approval interrupt | ✅ Built |
 | 3. Service & delivery | **FastAPI** webhook service (HMAC-verified, write-access check), durable SQLite job queue + background worker, idempotent runs (redelivery and re-label dedupe), `/autoforge approve` comments, Docker image + compose, GitHub Actions CI (ruff, mypy --strict, pytest, Docker build) | ✅ Built, 115 automated tests |
-| 4. Quality | Repo-context retrieval, C code generation, sandboxed pre-PR verification (lint/tests), evaluation harness measuring reviewer lift | ⚪ Next |
+| 4a. Context + C | **Ticket-driven repo-context retrieval** (identifiers, file names and keywords from the issue → defining files, header/source pairs, includes/imports, tests, callers, build files; excerpts for large files; reasons listed in the PR), **C support** with language-specific rules for coder and reviewer | ✅ Built, 143 automated tests |
+| 4b–c. Quality | Sandboxed pre-PR verification (build/tests/lint), evaluation harness measuring context recall and reviewer lift | ⚪ Next |
 | Later | Jira as a second ticket source (pluggable `TicketSource` port) | ⚪ Planned |
 
 ## Architecture
@@ -111,7 +112,7 @@ flowchart LR
     class JIRA,POL,TESTGEN,REQ,HIL,VERIFY,BENCH planned
 ```
 
-<sub>🟩 built (Phase 1.1–1.3) · ⬜ planned (Phase 1.4 and Phases 2–4) · solid
+<sub>🟩 built (Phase 1.1–1.4a) · ⬜ planned (Phase 1.4b–c and Phases 2–4) · solid
 arrows = working today, dashed = planned.</sub>
 
 Layers, ports and the per-run sequence diagram are in
@@ -143,7 +144,7 @@ Python 3.11 · OpenAI Responses API (structured outputs) · LangGraph (SQLite ch
 · FastAPI / uvicorn · GitHub REST API and webhooks · pydantic / pydantic-settings · httpx
 · SQLite · pytest · ruff · mypy (strict) · Docker · GitHub Actions
 
-## How it works today (Phase 1, increments 1–3)
+## How it works today (Phase 1, increments 1–4a)
 
 A maintainer adds the `autoforge` label to an issue. GitHub sends a webhook to
 the AutoForge service, which verifies its HMAC signature, drops duplicates,
@@ -153,10 +154,16 @@ who added the label has write access, then runs the LangGraph agent graph
 
 1. Reads the GitHub issue (title, body, comments, labels) and labels it
    `autoforge:in-progress`.
-2. Snapshots the repo's default branch: the file tree plus convention and
-   source files, up to a size budget.
+2. Chooses the **context for this ticket**: it extracts file names, code
+   identifiers (`contactor_update`) and keywords (`overcurrent`, `CAN`) from
+   the issue, finds the files that define or mention them, and follows the
+   code's structure (C header ↔ source, `#include`s / imports, unit tests,
+   callers, build and style files). Large relevant files are shown as
+   read-only excerpts. Each file's reason is logged and listed in the PR.
 3. **Coder agent** (OpenAI, structured outputs) proposes a change: files,
-   commit message, PR title and body.
+   commit message, PR title and body. Its instructions include the rules for
+   the repo's languages (for C: fixed-width types, header/source consistency,
+   no dynamic memory, `NULL` and bounds checks, new sources added to the build).
 4. **Policy layer** validates it: paths must be safe, nothing may be written
    under `.git/` or `.github/workflows/`, and a file can only be modified if
    the agent saw its current content. A violation goes back to the coder as

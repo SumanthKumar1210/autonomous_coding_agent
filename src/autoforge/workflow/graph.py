@@ -46,6 +46,7 @@ from autoforge.domain.errors import ChangeValidationError, ReviewRejectedError
 from autoforge.domain.models import (
     BaseRef,
     CodeChange,
+    ContextFile,
     FileChange,
     PullRequest,
     RepoSnapshot,
@@ -61,7 +62,8 @@ from autoforge.ports import Coder, RepoHost, Reviewer
 log = logging.getLogger(__name__)
 
 CHECKPOINT_TYPES: tuple[type, ...] = (
-    Ticket, BaseRef, RepoSnapshot, CodeChange, FileChange, ReviewVerdict, ReviewFinding, Revision, TokenUsage,
+    Ticket, BaseRef, RepoSnapshot, ContextFile, CodeChange, FileChange, ReviewVerdict, ReviewFinding, Revision,
+    TokenUsage,
     PullRequest,
 )
 """Every non-builtin type stored in ``RunState``; the only types a checkpoint may restore."""
@@ -169,8 +171,8 @@ def build_graph(
     """
 
     def prepare(state: RunState) -> Command[Literal["code"]]:
-        """Build the repository snapshot both agents will see."""
-        snapshot = build_snapshot(repo, max_context_bytes=settings.max_context_bytes,
+        """Build the repository snapshot both agents will see, with context chosen for the ticket."""
+        snapshot = build_snapshot(repo, state["ticket"], max_context_bytes=settings.max_context_bytes,
                                   max_file_bytes=settings.max_file_bytes)
         return Command(goto="code", update={"snapshot": snapshot, "attempts": 0, "usage": TokenUsage(),
                                             "revision": None})

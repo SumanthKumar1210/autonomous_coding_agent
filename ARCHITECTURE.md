@@ -68,14 +68,14 @@ the ticket.
 | `workflow/pipeline.py` | workflow | `run_ticket` / `resume_run`: idempotency check, load ticket, run or resume the graph, report every outcome (PR, awaiting approval, rejected, failed) on the ticket | ✅ |
 | `workflow/graph.py` | workflow | LangGraph state machine: prepare → code → validate → review → (approve) → publish, with the bounded coder ↔ reviewer loop and the HITL interrupt (verify step arrives in 1.4) | ✅ |
 | Checkpoint store | workflow | Graph state saved after every node, under `thread_id = run_id`. SQLite file (`CHECKPOINT_DB`); restores only allow-listed domain types | ✅ |
-| `agents/context.py` | agents | Builds the `RepoSnapshot`: file tree plus selected files within a byte budget | ✅ (retrieval upgrade 1.4) |
+| `agents/context.py` | agents | Ticket-driven context retrieval: scores every file against the ticket's file names, identifiers and keywords, then expands along header/source pairs, includes/imports, tests, callers and build files. Fills the byte budget in priority order; large relevant files become read-only excerpts. Every file carries a reason that is logged and listed in the PR | ✅ |
 | `agents/prompts.py` | agents | Versioned coder and reviewer system prompts and input templates. Untrusted content goes inside `<ticket>`/`<repository>`/`<proposed_change>`/`<review_feedback>` tags | ✅ |
 | `agents/llm.py` | agents | Shared OpenAI structured-output call. Truncated or refused output becomes an `AgentError` | ✅ |
 | `agents/coder.py` | agents | `OpenAICoder`: ticket + snapshot (+ revision feedback) → `CodeChange` | ✅ |
 | `agents/reviewer.py` | agents | `OpenAIReviewer`: ticket + snapshot + change → `ReviewVerdict` with blocker / major / minor findings | ✅ |
-| `agents/languages/` | agents | Per-language guidance and checks (Python, C) behind one small interface | 🟨 1.4 |
+| `agents/languages.py` | agents | `Language` interface (imports, definitions, related files, coder rules, reviewer checks) with `CLanguage` and `PythonLanguage`. Regex-based, no compiler or new dependency | ✅ |
 | `TicketSource` | port | `get_ticket`, `comment`, `set_status`, `is_authorized(actor)` | ✅ |
-| `RepoHost` | port | `get_base`, `list_files`, `read_file`, `find_open_pull`, `publish`, `open_pull`. No merge | ✅ |
+| `RepoHost` | port | `get_base`, `list_files`, `read_files` (one tarball, unpacked in memory, for large repos), `find_open_pull`, `publish`, `open_pull`. No merge | ✅ |
 | `Coder` | port | `generate(ticket, snapshot, revision=None) → CoderResult` | ✅ |
 | `Reviewer` | port | `review(ticket, snapshot, change) → ReviewerResult` | ✅ |
 | `JobStore` | port | `add`, `claim_next`, `finish`, `has_pending`, `last_run`, `requeue_running` | ✅ |
@@ -143,14 +143,15 @@ network access.
 ```
 src/autoforge/
 ├── domain/
-│   ├── models.py          Ticket, TicketStatus, BaseRef, RepoFile, RepoSnapshot, PullRequest,
+│   ├── models.py          Ticket, TicketStatus, BaseRef, RepoFile, ContextFile, RepoSnapshot, PullRequest,
 │   │                      FileChange, CodeChange, ReviewFinding, ReviewVerdict (LLM schemas),
 │   │                      TokenUsage, CoderResult, ReviewerResult, Revision, Trigger, Job
 │   ├── policy.py          validate_change, assert_writable_branch   ← hard constraints in code
 │   └── errors.py          TicketError, ChangeValidationError, SafetyError, AgentError, ReviewRejectedError
 ├── ports.py               TicketSource, RepoHost, Coder, Reviewer, JobStore
 ├── agents/
-│   ├── context.py         build_snapshot / select_context_files (repo context within a budget)
+│   ├── context.py         build_snapshot / plan_context: ticket-driven context with reasons and excerpts
+│   ├── languages.py       Language interface + CLanguage / PythonLanguage (includes, definitions, rules)
 │   ├── prompts.py         coder + reviewer system prompts and input templates (versioned, evaluable)
 │   ├── llm.py             structured_call: one OpenAI Responses API call with error handling
 │   ├── coder.py           OpenAICoder    → CodeChange
@@ -246,7 +247,7 @@ sequenceDiagram
     end
     W->>T: get_ticket(key), set_status(IN_PROGRESS)
     W->>G: invoke(state, thread_id = run_id)
-    G->>R: get_base, list_files, read_file (context)
+    G->>R: get_base, list_files, read_files (context chosen for the ticket)
     loop up to MAX_ATTEMPTS
         G->>C: generate(ticket, snapshot, revision)
         C-->>G: CodeChange
@@ -274,7 +275,7 @@ sequenceDiagram
 | Concern | How it's handled |
 |---|---|
 | **Human in the loop** | `RepoHost` has no merge or approve method. `assert_writable_branch` allows writes only to `autoforge/*` branches. `tests/test_github_client.py` asserts the client has no merge method. |
-| **Untrusted input** | Issue text, repo files, proposed changes and review feedback are wrapped in tags and treated as data. The coder prompt tells the model to flag injected instructions, not follow them; the reviewer treats any attempt to steer its verdict as a blocker. `domain.policy` rejects path traversal and writes under `.git/` or `.github/workflows/` whatever the models say. The reviewer's `approved` flag is not trusted alone: any blocker or major finding blocks publishing. |
+| **Untrusted input** | Issue text, repo files, proposed changes and review feedback are wrapped in tags and treated as data. Context retrieval only *matches* ticket text against the code; tag attributes are escaped; repository archives are unpacked in memory and only regular files are read. The coder prompt tells the model to flag injected instructions, not follow them; the reviewer treats any attempt to steer its verdict as a blocker. `domain.policy` rejects path traversal and writes under `.git/` or `.github/workflows/` whatever the models say. The reviewer's `approved` flag is not trusted alone: any blocker or major finding blocks publishing. |
 | **Idempotency** | Layered: a redelivered webhook (same `X-GitHub-Delivery`) is stored once; a second RUN for a ticket already queued is dropped; a RUN while the ticket's run awaits approval is skipped; each ticket gets a fixed branch, `autoforge/issue-<N>`, and if a PR is already open the run does nothing. A leftover branch with no open PR is reset. |
 | **Authorization** | Webhooks must carry a valid HMAC-SHA256 signature (constant-time check); the service refuses to start without a secret. Before acting, the worker checks that the user who added the label or wrote the approval comment has write access. Anyone else is ignored without a comment, so outsiders cannot make AutoForge spam issues. Only events from the configured repo are accepted. |
 | **Deployment** | One container: FastAPI + one worker thread, non-root, read-only root filesystem, dropped capabilities, health check. Job queue and checkpoints are SQLite files on the `/data` volume; jobs interrupted by a restart are requeued. See `docs/DEPLOYMENT.md`. |
@@ -290,7 +291,9 @@ sequenceDiagram
 |---|---|---|
 | 2. LangGraph + reviewer ✅ | `workflow/graph.py` runs behind `run_ticket` / `resume_run`. `agents/reviewer.py`, the `Reviewer` port and the `ReviewVerdict` model. SQLite checkpointer and HITL interrupt. | `workflow/`, `agents/`, `ports.py`, `domain/models.py` |
 | 3. Webhook service ✅ | `app/webhook.py` (FastAPI) verifies and queues; `workflow/worker.py` authorizes and runs; `SqliteJobStore` behind the `JobStore` port; approval by issue comment; Dockerfile, compose and CI. | `app/`, `workflow/`, `integrations/`, repo root |
-| 4. Context, C, verification, evals | Better `select_context_files`. Python and C prompts and checks behind a small `Language` interface. A `Verifier` port that runs the repo's checks in a sandbox container before publishing. `evals/` holds a sample-ticket suite. | `agents/`, `ports.py`, `integrations/sandbox/`, `evals/` |
+| 4a. Context + C ✅ | Ticket-driven `plan_context` (scoring, structural expansion, excerpts, reasons in logs and PR). `agents/languages.py` with C and Python rules for both agents. `RepoHost.read_files` with an in-memory tarball for large repos. | `agents/`, `ports.py`, `integrations/github/` |
+| 4b. Verification | A `Verifier` port that runs the repo's checks (build, tests, linters) in a sandbox container before publishing; failures go back to the coder. | `ports.py`, `integrations/sandbox/`, `workflow/graph.py` |
+| 4c. Evals | `evals/` holds a sample-ticket suite measuring context recall and change quality (e.g. single agent vs coder + reviewer). | `evals/` |
 | Later: Jira | `integrations/jira/` implementing `TicketSource`. | `integrations/` |
 
 Steps 2–4 of the product roadmap (test generation, MISRA, Polarion, HIL/SIL) are

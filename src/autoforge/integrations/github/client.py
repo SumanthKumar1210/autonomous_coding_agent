@@ -223,6 +223,48 @@ class GitHubClient:
         data = self._request("GET", f"/git/blobs/{blob_sha}")
         return base64.b64decode(data["content"])
 
+    def download_tarball(self, commit_sha: str, *, max_bytes: int) -> bytes:
+        """Download the repository at ``commit_sha`` as a gzipped tar archive.
+
+        One request instead of one per file, so reading a large repository stays
+        fast and within rate limits. GitHub redirects to ``codeload.github.com``;
+        httpx drops the ``Authorization`` header on that cross-host redirect
+        (the redirect URL itself carries a short-lived token for private repos).
+
+        Args:
+            commit_sha: Commit to download.
+            max_bytes: Abort once the download exceeds this size.
+
+        Raises:
+            GitHubError: On HTTP errors, network failure, or when ``max_bytes``
+                is exceeded.
+        """
+        url = f"/repos/{self.repo}/tarball/{commit_sha}"
+        for attempt in range(1, self._max_attempts + 1):
+            last = attempt == self._max_attempts
+            try:
+                with self._http.stream("GET", url, follow_redirects=True) as resp:
+                    if resp.status_code in _RETRYABLE_STATUSES and not last:
+                        self._backoff(attempt, resp.headers.get("retry-after"))
+                        continue
+                    if resp.status_code >= 400:
+                        resp.read()
+                        raise GitHubError(resp.status_code, f"GET tarball failed: {resp.status_code} "
+                                                            f"{_error_message(resp)}")
+                    chunks: list[bytes] = []
+                    total = 0
+                    for chunk in resp.iter_bytes():
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise GitHubError(None, f"repository archive exceeds {max_bytes} bytes")
+                        chunks.append(chunk)
+                    return b"".join(chunks)
+            except httpx.TransportError as exc:  # GET is idempotent: safe to retry
+                if last:
+                    raise GitHubError(None, f"GET tarball: {exc}") from exc
+                self._backoff(attempt, None)
+        raise GitHubError(None, "GET tarball: no response")  # unreachable: last attempt returns or raises
+
     def create_tree(self, base_tree_sha: str, entries: list[dict[str, Any]]) -> str:
         """Create a new tree = the base tree with ``entries`` added/changed/removed.
 

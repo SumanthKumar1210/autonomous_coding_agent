@@ -63,3 +63,11 @@ def test_only_agent_branches_are_writable(branch: str) -> None:
 def test_agent_branch_is_writable() -> None:
     """Writing to an autoforge/* branch is allowed."""
     assert_writable_branch("autoforge/issue-1", BASE, required_prefix="autoforge/")
+
+
+def test_excerpted_file_cannot_be_modified() -> None:
+    """A file shown only as an excerpt is read-only: modifying it would overwrite the unseen parts."""
+    snapshot = RepoSnapshot(base=BASE, modes={"big.c": "100644"}, excerpts={"big.c": "int x;\n... omitted ..."})
+
+    with pytest.raises(ChangeValidationError, match="was not provided"):
+        validate_change(_change(_f("big.c", "modify")), snapshot)

@@ -92,3 +92,33 @@ def test_reviewer_input_contains_ticket_repo_and_change() -> None:
 
     assert text.index("<ticket>") < text.index("<repository") < text.index("<proposed_change>")
     assert "y = 2" in text
+
+
+def test_repository_renders_reasons_excerpts_and_escapes_attributes() -> None:
+    """Files carry their reason, excerpts get their own read-only section, attribute values are escaped."""
+    from autoforge.agents.prompts import render_repository
+    from autoforge.domain.models import ContextFile
+
+    snapshot = RepoSnapshot(BaseRef("main", "c", "t"), {"a.c": "100644", "big.c": "100644"}, {"a.c": "int a;\n"},
+                            excerpts={"big.c": "int big;\n... [lines 2-900 omitted] ..."},
+                            context=[ContextFile("a.c", 'defines `a" onload="x`'),
+                                     ContextFile("big.c", "uses a.c", excerpt=True)])
+
+    text = render_repository(snapshot)
+
+    assert '<file path="a.c" reason="defines `a&quot; onload=&quot;x`">' in text
+    assert '<excerpts>\n<excerpt path="big.c" reason="uses a.c">' in text
+    assert text.index("<files>") < text.index("<excerpts>")
+
+
+def test_language_rules_follow_the_repository() -> None:
+    """C rules are added only when the repository has C files; an empty repo gets every language's rules."""
+    from autoforge.agents.prompts import coder_instructions, reviewer_instructions
+
+    python_only = RepoSnapshot(BaseRef("main", "c", "t"), {"a.py": "100644"})
+    with_c = RepoSnapshot(BaseRef("main", "c", "t"), {"a.py": "100644", "fw/x.h": "100644"})
+    empty = RepoSnapshot(BaseRef("main", "c", "t"), {})
+
+    assert "C rules" not in coder_instructions(python_only) and "Python rules" in coder_instructions(python_only)
+    assert "C rules" in coder_instructions(with_c) and "C checks" in reviewer_instructions(with_c)
+    assert "C rules" in coder_instructions(empty) and "Python rules" in coder_instructions(empty)

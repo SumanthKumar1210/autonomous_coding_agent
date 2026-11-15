@@ -101,6 +101,23 @@ class RepoFile:
 
 
 @dataclass(frozen=True)
+class ContextFile:
+    """Why one file was shown to the agents (logged and listed in the PR).
+
+    Attributes:
+        path: Repository-relative path.
+        reason: Short human-readable reason, e.g. ``"defines `soc_update`"`` or
+            ``"included by src/soc.c"``.
+        excerpt: ``True`` if only parts of the file were shown (it was too
+            large). Excerpted files can be read but never modified.
+    """
+
+    path: str
+    reason: str
+    excerpt: bool = False
+
+
+@dataclass(frozen=True)
 class RepoSnapshot:
     """Everything the agents know about the repository for one run.
 
@@ -108,13 +125,18 @@ class RepoSnapshot:
         base: The commit the change will be built on.
         modes: Every file path in the repo mapped to its git mode. Used to know
             which files exist and to preserve modes when editing.
-        files: Content of the files actually shown to the LLM (a budgeted
-            subset). The agent may only *modify* files listed here.
+        files: Full content of the files shown to the LLM (a budgeted, ticket-
+            relevant subset). The agent may only *modify* files listed here.
+        excerpts: Partial content of relevant files too large to show in full
+            (read-only for the agent).
+        context: Which files were shown and why, in priority order.
     """
 
     base: BaseRef
     modes: dict[str, str]
     files: dict[str, str] = field(default_factory=dict)
+    excerpts: dict[str, str] = field(default_factory=dict)
+    context: list[ContextFile] = field(default_factory=list)
 
     @property
     def default_branch(self) -> str:

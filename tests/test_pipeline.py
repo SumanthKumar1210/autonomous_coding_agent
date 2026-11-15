@@ -296,3 +296,21 @@ def test_missing_issue_fails_cleanly() -> None:
 
     assert result.outcome is RunOutcome.FAILED
     assert "404" in (result.error or "")
+
+
+def test_context_is_chosen_for_the_ticket_and_listed_in_the_pr() -> None:
+    """The coder sees the files relevant to the ticket (with reasons), and the PR lists them for the reviewer."""
+    fake = FakeGitHub({"README.md": "# Sandbox\n", "src/app.py": "print('hi')\n",
+                       "src/thermal.py": "def derate_current(temp_c):\n    return 1.0\n",
+                       "src/unrelated.py": "X = 1\n"})
+    fake.add_issue(7, title="Derating is wrong", body="`derate_current` must reduce current above 45 C.")
+    coder = FakeCoder()
+
+    _run(fake, coder)
+
+    _, snapshot = coder.seen
+    reasons = {c.path: c.reason for c in snapshot.context}
+    assert reasons["src/thermal.py"].startswith("defines `derate_current`")
+    assert reasons["src/unrelated.py"].endswith("(style reference)")  # small same-folder file, not a match
+    body = fake.pulls[0]["body"]
+    assert "Context the agents read" in body and "- src/thermal.py: defines `derate_current`" in body

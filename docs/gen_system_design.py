@@ -129,10 +129,10 @@ band(40, 630, 540, 250, "agents/  —  LLM roles", ty=870)
 band(600, 630, 560, 250, "integrations/  —  adapters", tx=614, anchor="start", ty=870)
 block(60, 670, 180, 64, "coder.py", ["OpenAICoder"])
 block(300, 670, 160, 64, "reviewer.py", ["OpenAIReviewer · verdict"])
-block(60, 785, 125, 60, "context.py", ["repo snapshot"])
+block(60, 785, 125, 60, "context.py", ["ticket-driven context"])
 block(195, 785, 125, 60, "prompts.py", ["coder + reviewer"])
 block(330, 785, 115, 60, "llm.py", ["structured_call"])
-block(455, 785, 115, 60, "languages/", ["Python · C rules"], "next")
+block(455, 785, 115, 60, "languages.py", ["Python · C rules"])
 
 block(620, 670, 160, 64, "github/issues.py", ["GitHubIssuesSource"])
 block(800, 670, 160, 64, "github/repo.py", ["GitHubRepoHost"])
@@ -182,7 +182,7 @@ block(610, 1206, 530, 54, "evals/", ["sample tickets · quality scoring of agent
 
 # ---------------- legend ----------------
 ly = 1300
-items = [("built", "Built (Phase 1.1–1.3)"), ("next", "Next (1.4 context · C · verify · evals)"),
+items = [("built", "Built (Phase 1.1–1.4a)"), ("next", "Next (1.4b verify · 1.4c evals)"),
          ("planned", "Planned (later)"), ("ext", "External system"), ("actor", "Actor")]
 x = 40
 for kind, text in items:

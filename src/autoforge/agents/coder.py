@@ -13,7 +13,7 @@ from __future__ import annotations
 from openai import OpenAI
 
 from autoforge.agents.llm import structured_call
-from autoforge.agents.prompts import CODER_SYSTEM_PROMPT, build_coder_input
+from autoforge.agents.prompts import build_coder_input, coder_instructions
 from autoforge.domain.models import CodeChange, CoderResult, RepoSnapshot, Revision, Ticket
 
 
@@ -60,7 +60,7 @@ class OpenAICoder:
         change, usage = structured_call(
             self._client,
             model=self._model,
-            instructions=CODER_SYSTEM_PROMPT,
+            instructions=coder_instructions(snapshot),
             input_text=build_coder_input(ticket, snapshot, revision),
             schema=CodeChange,
             max_output_tokens=self._max_output_tokens,

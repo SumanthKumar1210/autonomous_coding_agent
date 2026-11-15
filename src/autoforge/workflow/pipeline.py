@@ -283,13 +283,23 @@ def _file_list(state: RunState) -> str:
     return "\n".join(f"- `{f.action}` {f.path}" for f in state["change"].files)
 
 
+def _context_list(state: RunState) -> str:
+    """Collapsed Markdown list of the files the agents read, and why (traceability for the reviewer)."""
+    context = state["snapshot"].context
+    if not context:
+        return ""
+    rows = "\n".join(f"- {c.path}: {c.reason}{' (excerpt)' if c.excerpt else ''}" for c in context)
+    return f"\n<details><summary>Context the agents read ({len(context)} files)</summary>\n\n{rows}\n</details>\n"
+
+
 def _pr_body(state: RunState) -> str:
     """Build the pull request description.
 
     It is the agent's own ``pr_body`` followed by a fixed footer: ``Closes #N``
     (links the PR to the ticket), the list of changed files, the automated
-    review outcome (with any remaining minor findings), a reminder that a human
-    must review, and run metadata (run ID, models, attempts, token usage).
+    review outcome (with any remaining minor findings), the files the agents
+    read and why, a reminder that a human must review, and run metadata (run
+    ID, models, attempts, token usage).
     """
     change, verdict, usage = state["change"], state["verdict"], state["usage"]
     notes = "\n".join(f"- `{f.path or 'whole change'}`: {f.message}" for f in verdict.findings)
@@ -308,7 +318,7 @@ Closes #{state['ticket_key'].lstrip('#')}
 
 **Automated review**
 {review}
-
+{_context_list(state)}
 > [!IMPORTANT]
 > AutoForge generated this pull request. A human must review it before it is merged.
 

@@ -14,9 +14,38 @@ How a change is published:
 
 from __future__ import annotations
 
+import io
+import logging
+import tarfile
+
 from autoforge.domain.models import BaseRef, CodeChange, PullRequest, RepoFile, RepoSnapshot
 from autoforge.domain.policy import assert_writable_branch
 from autoforge.integrations.github.client import GitHubClient, GitHubError
+
+log = logging.getLogger(__name__)
+
+BLOB_READ_LIMIT = 30
+"""Read at most this many files one request at a time; more come from one tarball."""
+
+MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
+"""Largest repository archive downloaded for context (compressed size)."""
+
+
+def _unpack(archive: bytes, wanted: set[str]) -> dict[str, bytes]:
+    """Return the content of the ``wanted`` regular files from a GitHub tarball, in memory.
+
+    GitHub archives put everything under one top folder (``owner-repo-sha/``),
+    which is stripped. Never extracts to disk.
+    """
+    out: dict[str, bytes] = {}
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
+        for member in tar:
+            if not member.isreg():
+                continue
+            path = member.name.split("/", 1)[1] if "/" in member.name else ""
+            if path in wanted and (data := tar.extractfile(member)) is not None:
+                out[path] = data.read()
+    return out
 
 
 class GitHubRepoHost:
@@ -68,9 +97,25 @@ class GitHubRepoHost:
             if e.get("type") == "blob"
         ]
 
-    def read_file(self, file: RepoFile) -> bytes:
-        """Download one file's raw bytes."""
-        return self._gh.get_blob(file.blob_id)
+    def read_files(self, base: BaseRef, files: list[RepoFile]) -> dict[str, bytes]:
+        """Download several files' raw bytes at ``base``.
+
+        Up to ``BLOB_READ_LIMIT`` files are fetched one by one (blob API).
+        More than that are read from a single tarball of the commit, which is
+        unpacked **in memory only**: nothing is written to disk and only
+        regular files whose paths were requested are returned (links and
+        special entries in the archive are ignored). If the archive is too
+        large, it falls back to blobs for the first ``BLOB_READ_LIMIT`` files.
+        """
+        if len(files) <= BLOB_READ_LIMIT:
+            return {f.path: self._gh.get_blob(f.blob_id) for f in files}
+        try:
+            archive = self._gh.download_tarball(base.commit_sha, max_bytes=MAX_ARCHIVE_BYTES)
+        except GitHubError as exc:
+            log.warning("tarball read failed; reading first files individually",
+                        extra={"error": str(exc), "files": len(files)})
+            return {f.path: self._gh.get_blob(f.blob_id) for f in files[:BLOB_READ_LIMIT]}
+        return _unpack(archive, {f.path for f in files})
 
     def find_open_pull(self, branch: str) -> PullRequest | None:
         """Return the open PR from ``branch``, or ``None`` (used for idempotency)."""
