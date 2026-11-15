@@ -39,6 +39,28 @@ Without Docker: `pip install -e .` and then `autoforge serve --port 8080`.
 The container runs as a non-root user with a read-only filesystem. The port is
 bound to `127.0.0.1` only.
 
+Compose also starts the **verification sandbox** (`sandbox` service), where the
+repository's checks run on every proposed change. It sits on an internal
+network with no internet access and no published port; only the service can
+reach it (`SANDBOX_URL=http://sandbox:8090`). Without `SANDBOX_URL` (e.g. the
+CLI outside compose) verification is skipped and the PR says so.
+
+Which checks run is decided by the target repository's default branch:
+
+```toml
+# .autoforge.toml at the repository root (optional; replaces auto-detection)
+[[checks]]
+name = "firmware"
+run = "cmake -S firmware -B build && cmake --build build && ctest --test-dir build --output-on-failure"
+timeout = 900   # seconds, at most 1800
+```
+
+Without the file AutoForge detects top-level CMake projects (build + CTest),
+pytest (when `test_*.py` files exist) and ruff (when configured).
+`checks = []` turns verification off. The sandbox has no internet access, so
+checks cannot download dependencies: the image ships gcc, CMake, pytest and
+ruff.
+
 ## 3. Expose it to GitHub through a tunnel
 
 GitHub has to reach the service. For a local deployment, use one of these:
@@ -84,6 +106,7 @@ Use **Redeliver** in GitHub's UI to safely retry a delivery that failed.
 | State | Docker volume `autoforge-data`: `/data/jobs.sqlite` (queue and run history) and `/data/checkpoints.sqlite` (paused runs). Back up both together. |
 | Restarts | A job interrupted mid-run is queued again on startup. Idempotency (one open PR per issue) prevents duplicates. |
 | Throughput | One worker runs one job at a time, so jobs are serialised per container. Run a single replica: SQLite is not shared between hosts. |
+| Sandbox | One job at a time, 2 GB memory, 2 CPUs, 256 processes, 2 GB tmpfs workspace. Each check times out after its `timeout` (default 600 s, CMake 900 s). Logs: `docker compose logs sandbox`. To add a toolchain, extend the `sandbox` stage of the `Dockerfile`. |
 | Logs | JSON on stdout. Filter by `run_id` to follow one run from the webhook to the PR. |
 | Secrets | Only from the environment (`.env` locally; a secret store in the cloud). Never baked into the image. |
 

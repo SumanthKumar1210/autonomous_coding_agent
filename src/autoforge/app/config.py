@@ -40,6 +40,9 @@ class Settings(BaseSettings):
         checkpoint_db: SQLite file holding run checkpoints (needed to resume paused runs).
         jobs_db: SQLite file holding the job queue (webhook triggers and their results).
         worker_poll_seconds: How often the worker checks an empty queue.
+        sandbox_url: Base URL of the verification sandbox (``http://sandbox:8090`` in
+            docker compose). Empty skips verification; the PR then says checks were not run.
+        sandbox_timeout_seconds: Longest wait for one sandbox job (all checks).
         log_level: Minimum log level (``DEBUG``, ``INFO``, ``WARNING`` ...).
     """
 
@@ -69,6 +72,10 @@ class Settings(BaseSettings):
     checkpoint_db: str = ".autoforge/checkpoints.sqlite"
     jobs_db: str = ".autoforge/jobs.sqlite"
     worker_poll_seconds: float = Field(default=2.0, gt=0)
+
+    # Verification sandbox
+    sandbox_url: str = ""
+    sandbox_timeout_seconds: float = Field(default=3700.0, gt=0)
 
     log_level: str = "INFO"
 

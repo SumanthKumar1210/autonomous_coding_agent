@@ -9,6 +9,11 @@ services:
     environment:
       CHECKPOINT_DB: /data/checkpoints.sqlite
       JOBS_DB: /data/jobs.sqlite
+      SANDBOX_URL: http://sandbox:8090   # repository checks run there, never in this container
+    networks: [default, sandbox]
+    depends_on:
+      sandbox:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8080:8080"           # only reachable from this machine (and the tunnel)
     volumes:
@@ -20,6 +25,31 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
+
+  # Verification sandbox: builds and tests agent changes. Isolated from the service and the internet.
+  sandbox:
+    build:
+      context: .
+      target: sandbox
+    image: autoforge-sandbox:local
+    networks: [sandbox]                 # internal network only: no internet, not reachable from the host
+    init: true                          # a real PID 1 reaps orphaned check processes (no zombies)
+    restart: unless-stopped
+    read_only: true
+    tmpfs:                              # job workspaces live in memory and vanish with the container
+      - /work:size=2g,exec,mode=1777
+      - /tmp:size=256m,exec,mode=1777
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, KILL]     # just enough to run each job as "runner" and kill what it leaves
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    pids_limit: 256
+    cpus: 2
+
+networks:
+  sandbox:
+    internal: true
 
 volumes:
   autoforge-data:

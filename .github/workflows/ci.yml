@@ -44,8 +44,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: docker build -t autoforge:ci .
+        run: |
+          docker build -t autoforge:ci .
+          docker build --target sandbox -t autoforge-sandbox:ci .
       - name: Smoke test
         run: |
           docker run --rm autoforge:ci autoforge --help
           docker run --rm autoforge:ci python -c "import autoforge.app.webhook"
+          docker run --rm autoforge-sandbox:ci sh -c 'cmake --version && gcc --version && python -I -m autoforge.sandbox.server --help'

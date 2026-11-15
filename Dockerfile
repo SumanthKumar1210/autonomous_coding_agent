@@ -11,6 +11,20 @@ COPY src ./src
 RUN pip install --no-cache-dir --upgrade pip \
  && pip wheel --no-cache-dir --wheel-dir /wheels .
 
+# ---- sandbox: build tools + the stdlib-only sandbox server (docker compose service "sandbox") ----
+#   docker build --target sandbox -t autoforge-sandbox .
+# Runs repository checks for the service. No secrets, no service dependencies; in compose it has no
+# internet access. The server starts as root with only SETUID/SETGID/KILL and runs every job as "runner".
+FROM python:3.12-slim AS sandbox
+ENV PYTHONDONTWRITEBYTECODE=1     PYTHONUNBUFFERED=1
+RUN apt-get update  && apt-get install -y --no-install-recommends gcc g++ make cmake libc6-dev  && rm -rf /var/lib/apt/lists/*  && pip install --no-cache-dir pytest==9.2.0 ruff==0.17.5  && useradd --system --uid 10002 --user-group --no-create-home --shell /usr/sbin/nologin runner  && mkdir -p /work
+COPY --from=build /wheels /wheels
+RUN pip install --no-cache-dir --no-deps /wheels/autoforge-*.whl && rm -rf /wheels
+WORKDIR /work
+EXPOSE 8090
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3   CMD ["python", "-c", "import sys, urllib.request; sys.exit(urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=4).status != 200)"]
+CMD ["python", "-I", "-m", "autoforge.sandbox.server", "--host", "0.0.0.0", "--port", "8090", "--work-dir", "/work", "--job-user", "runner"]
+
 # ---- runtime: minimal image, non-root user, state on a volume -------------------------
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \

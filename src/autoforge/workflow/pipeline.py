@@ -6,8 +6,9 @@
    ticket, stop (re-triggering must never create duplicate PRs).
 2. **Load ticket** - if that fails there is nothing to report back on, so return.
 3. Mark the ticket **in progress**.
-4. Run the **agent graph** (``workflow.graph``): context -> coder <-> reviewer
-   loop -> optional human approval -> publish branch + PR.
+4. Run the **agent graph** (``workflow.graph``): context -> coder -> sandbox
+   checks -> reviewer (looping back to the coder on failures) -> optional human
+   approval -> publish branch + PR.
 5. **Feedback** - comment the outcome on the ticket and set its status label.
 
 ``resume_run`` continues a run that paused at the human approval gate
@@ -31,10 +32,10 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from autoforge.domain.errors import ReviewRejectedError
+from autoforge.domain.errors import ChecksFailedError, ReviewRejectedError
 from autoforge.domain.models import TicketStatus
 from autoforge.observability import run_context
-from autoforge.ports import Coder, RepoHost, Reviewer, TicketSource
+from autoforge.ports import Coder, RepoHost, Reviewer, TicketSource, Verifier
 from autoforge.workflow.graph import (
     AgentGraph,
     Checkpointer,
@@ -111,6 +112,8 @@ class Dependencies:
         reviewer: The agent that reviews the change.
         checkpointer: Where run state is saved. Production uses SQLite so a
             paused run survives a restart; the in-memory default suits tests.
+        verifier: Runs the repository's checks in the sandbox before review;
+            ``None`` skips verification (noted in the PR).
     """
 
     tickets: TicketSource
@@ -118,6 +121,7 @@ class Dependencies:
     coder: Coder
     reviewer: Reviewer
     checkpointer: Checkpointer = field(default_factory=lambda: InMemorySaver(serde=checkpoint_serializer()))
+    verifier: Verifier | None = None
 
 
 def branch_for(ticket_key: str, prefix: str) -> str:
@@ -226,7 +230,7 @@ def _drive(key: str, run_id: str, deps: Dependencies, config: WorkflowConfig, in
     except Exception as exc:  # top-level boundary: report every failure back on the ticket
         log.exception("run failed", extra={"ticket": key})
         message = f"{type(exc).__name__}: {exc}"
-        if isinstance(exc, ReviewRejectedError):
+        if isinstance(exc, ReviewRejectedError | ChecksFailedError):
             comment = f"AutoForge could not complete this ticket.\n\n{str(exc)[:3000]}\n\nRun ID: `{run_id}`"
         else:
             comment = f"AutoForge could not complete this ticket.\n\n```\n{message[:1000]}\n```\n\nRun ID: `{run_id}`"
@@ -269,7 +273,7 @@ def _graph(deps: Dependencies, config: WorkflowConfig) -> AgentGraph:
         repo=deps.repo, coder=deps.coder, reviewer=deps.reviewer, checkpointer=deps.checkpointer,
         settings=GraphSettings(max_context_bytes=config.max_context_bytes, max_file_bytes=config.max_file_bytes,
                                max_attempts=config.max_attempts, require_approval=config.require_approval),
-        pr_body=_pr_body,
+        pr_body=_pr_body, verifier=deps.verifier,
     )
 
 
@@ -292,12 +296,25 @@ def _context_list(state: RunState) -> str:
     return f"\n<details><summary>Context the agents read ({len(context)} files)</summary>\n\n{rows}\n</details>\n"
 
 
+def _checks_section(state: RunState) -> str:
+    """Markdown summary of the sandbox checks on the published change."""
+    report = state.get("verification")
+    if report is None or report.skipped:
+        return f"Not run: {report.skipped if report else 'no verification step'}."
+    rows = []
+    for c in report.checks:
+        mark = "✅" if c.passed else "⚠️" if c.preexisting else "❌"
+        note = "" if c.passed else " (also fails on the base commit)" if c.preexisting else f" ({c.status})"
+        rows.append(f"- {mark} **{c.name}**{note}: `{c.command}` · {c.duration_seconds:.1f} s")
+    return "Ran in an isolated sandbox on the change applied to the base commit.\n\n" + "\n".join(rows)
+
+
 def _pr_body(state: RunState) -> str:
     """Build the pull request description.
 
     It is the agent's own ``pr_body`` followed by a fixed footer: ``Closes #N``
-    (links the PR to the ticket), the list of changed files, the automated
-    review outcome (with any remaining minor findings), the files the agents
+    (links the PR to the ticket), the list of changed files, the sandbox checks
+    that ran, the automated review outcome (with any remaining minor findings), the files the agents
     read and why, a reminder that a human must review, and run metadata (run
     ID, models, attempts, token usage).
     """
@@ -315,6 +332,9 @@ Closes #{state['ticket_key'].lstrip('#')}
 
 **Files**
 {_file_list(state)}
+
+**Checks**
+{_checks_section(state)}
 
 **Automated review**
 {review}

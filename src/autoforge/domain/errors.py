@@ -48,3 +48,25 @@ class ReviewRejectedError(AgentError):
     The message lists the unresolved findings so they can be posted on the
     ticket. No pull request is opened.
     """
+
+
+class ChecksConfigError(AutoForgeError):
+    """The repository's ``.autoforge.toml`` check configuration is invalid.
+
+    The message says what is wrong, so a maintainer can fix the file.
+    """
+
+
+class VerificationError(AutoForgeError):
+    """The sandbox could not run the checks (unreachable, timed out, bad archive).
+
+    An infrastructure failure, not the agent's fault: the run fails and is
+    reported, rather than publishing an unverified change.
+    """
+
+
+class ChecksFailedError(AgentError):
+    """The change still broke repository checks after the allowed number of attempts.
+
+    The message lists the failing checks and their output; no pull request is opened.
+    """

@@ -20,6 +20,7 @@ from typing import Protocol
 
 from autoforge.domain.models import (
     BaseRef,
+    CheckSpec,
     CodeChange,
     CoderResult,
     Job,
@@ -31,6 +32,7 @@ from autoforge.domain.models import (
     Ticket,
     TicketStatus,
     Trigger,
+    VerificationReport,
 )
 
 
@@ -94,6 +96,10 @@ class RepoHost(Protocol):
         """
         ...
 
+    def download_archive(self, base: BaseRef) -> bytes:
+        """Return the whole repository at ``base`` as a gzipped tar archive (for the verification sandbox)."""
+        ...
+
     def find_open_pull(self, branch: str) -> PullRequest | None:
         """Return the open PR whose head is ``branch``, or ``None``."""
         ...
@@ -148,6 +154,26 @@ class Reviewer(Protocol):
 
         Raises:
             AgentError: If the model refuses, is truncated, or returns nothing usable.
+        """
+        ...
+
+
+class Verifier(Protocol):
+    """Runs the repository's checks (build, tests, linters) on a proposed change, isolated from the service.
+
+    Implemented by ``SandboxVerifier`` (a separate sandbox container); tests use
+    a ``FakeVerifier``. It never changes the repository.
+    """
+
+    def verify(self, archive: bytes, change: CodeChange, checks: list[CheckSpec]) -> VerificationReport:
+        """Apply ``change`` to the repository in ``archive`` and run ``checks`` on it.
+
+        Checks that fail are also run on the unchanged repository, so failures
+        that already exist on the base are marked ``preexisting``.
+
+        Raises:
+            VerificationError: If the checks could not be run at all (sandbox
+                unreachable, timed out, ...).
         """
         ...
 

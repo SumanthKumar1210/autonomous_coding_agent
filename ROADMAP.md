@@ -16,7 +16,7 @@ Deployed as a service. See `CLAUDE.md` for exact scope. Increments:
 4. Repo-context retrieval, C support (alongside Python), pre-PR verification
    with existing repo checks, evaluation harness (measure reviewer lift).
    - 4a ✅ Ticket-driven context retrieval + C support (language rules for coder and reviewer).
-   - 4b ⚪ Sandboxed pre-PR verification (build, tests, linters) with feedback to the coder.
+   - 4b ✅ Sandboxed pre-PR verification (build, tests, linters) with feedback to the coder.
    - 4c ⚪ Evaluation harness (context recall, change quality, reviewer lift).
 
 ## Deferred: Jira integration

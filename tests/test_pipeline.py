@@ -7,11 +7,12 @@ GitHub is ``FakeGitHub`` (HTTP-level fake); the agents are ``FakeCoder`` /
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from autoforge.domain.errors import TicketError
+from autoforge.domain.errors import TicketError, VerificationError
 from autoforge.domain.models import FileChange
 from autoforge.integrations.github.issues import GitHubIssuesSource
 from autoforge.integrations.github.repo import GitHubRepoHost
@@ -19,6 +20,7 @@ from autoforge.workflow.graph import checkpoint_serializer
 from autoforge.workflow.pipeline import Dependencies, RunOutcome, WorkflowConfig, resume_run, run_ticket
 from tests.fake_agents import GOOD_FILES, FakeCoder, FakeReviewer, approve, reject
 from tests.fake_github import FakeGitHub
+from tests.fake_sandbox import FakeVerifier, failing, passing
 
 EVIL = [FileChange(path=".github/workflows/ci.yml", action="create", content="on: push")]
 
@@ -314,3 +316,105 @@ def test_context_is_chosen_for_the_ticket_and_listed_in_the_pr() -> None:
     assert reasons["src/unrelated.py"].endswith("(style reference)")  # small same-folder file, not a match
     body = fake.pulls[0]["body"]
     assert "Context the agents read" in body and "- src/thermal.py: defines `derate_current`" in body
+
+
+# ------------------------------------------------------------------ verification (sandbox checks)
+
+FIRMWARE = {"README.md": "# Fw\n", "CMakeLists.txt": "project(fw C)\n", "src/app.c": "int x;\n"}
+
+
+def _verified_run(fake: FakeGitHub, coder: FakeCoder, verifier: FakeVerifier, reviewer: FakeReviewer | None = None,
+                  config: WorkflowConfig | None = None):
+    """Run the workflow with a verifier."""
+    deps = replace(_deps(fake, coder, reviewer), verifier=verifier)
+    return run_ticket("7", deps, config or WorkflowConfig())
+
+
+def test_checks_run_before_review_and_are_listed_in_the_pr() -> None:
+    """Detected checks get the base archive and the change; the PR lists the results."""
+    fake = FakeGitHub(dict(FIRMWARE))
+    fake.add_issue(7)
+    verifier = FakeVerifier()
+
+    result = _verified_run(fake, FakeCoder(), verifier)
+
+    assert result.outcome is RunOutcome.PR_OPENED
+    archive, change, checks = verifier.calls[0]
+    assert archive[:2] == b"\x1f\x8b" and change.files == GOOD_FILES  # gzip archive of the base commit
+    assert [c.name for c in checks] == ["cmake: ."]
+    body = fake.pulls[0]["body"]
+    assert "**Checks**" in body and "✅ **cmake: .**: `run cmake: .`" in body
+
+
+def test_failing_check_is_fed_back_to_coder_before_review() -> None:
+    """A check the change broke goes back to the coder with its output; the reviewer only sees the fixed change."""
+    fake = FakeGitHub(dict(FIRMWARE))
+    fake.add_issue(7)
+    coder, reviewer = FakeCoder(), FakeReviewer()
+
+    result = _verified_run(fake, coder, FakeVerifier(failing(), passing("cmake: .")), reviewer)
+
+    assert result.outcome is RunOutcome.PR_OPENED
+    assert len(coder.calls) == 2 and len(reviewer.reviewed) == 1
+    revision = coder.calls[1][2]
+    assert revision is not None and "Repository checks failed" in revision.feedback
+    assert "### cmake: . (exit code 2)" in revision.feedback and "'x' undeclared" in revision.feedback
+
+
+def test_checks_still_failing_after_max_attempts_fail_the_run() -> None:
+    """If the change keeps breaking a check, no PR is opened and the output is posted on the ticket."""
+    fake = FakeGitHub(dict(FIRMWARE))
+    fake.add_issue(7)
+
+    result = _verified_run(fake, FakeCoder(), FakeVerifier(failing()), config=WorkflowConfig(max_attempts=2))
+
+    assert result.outcome is RunOutcome.FAILED and "ChecksFailedError" in (result.error or "")
+    assert not fake.pulls and fake.labels[7] == ["autoforge:failed"]
+    assert "**cmake: .** (exit code 2)" in fake.comments[7][-1] and "'x' undeclared" in fake.comments[7][-1]
+
+
+def test_preexisting_failure_does_not_block_and_is_flagged() -> None:
+    """A check that also fails on the base commit is not the change's fault: the PR opens and says so."""
+    fake = FakeGitHub(dict(FIRMWARE))
+    fake.add_issue(7)
+    coder = FakeCoder()
+
+    result = _verified_run(fake, coder, FakeVerifier(failing(preexisting=True)))
+
+    assert result.outcome is RunOutcome.PR_OPENED and len(coder.calls) == 1
+    assert "⚠️ **cmake: .** (also fails on the base commit)" in fake.pulls[0]["body"]
+
+
+def test_without_sandbox_checks_are_skipped_and_the_pr_says_so() -> None:
+    """No verifier configured: the run works as before and the PR states that no checks ran."""
+    fake = FakeGitHub(dict(FIRMWARE))
+    fake.add_issue(7)
+
+    _run(fake, FakeCoder())
+
+    assert "Not run: no verification sandbox configured (SANDBOX_URL)." in fake.pulls[0]["body"]
+
+
+def test_check_config_from_default_branch_is_used_and_invalid_config_fails() -> None:
+    """``.autoforge.toml`` replaces detection; an invalid one fails the run with a clear message."""
+    fake = FakeGitHub({**FIRMWARE, ".autoforge.toml": '[[checks]]\nname = "unit"\nrun = "make test"\n'})
+    fake.add_issue(7)
+    verifier = FakeVerifier(passing("unit"))
+    _verified_run(fake, FakeCoder(), verifier)
+    assert [(c.name, c.command) for c in verifier.calls[0][2]] == [("unit", "make test")]
+
+    broken = FakeGitHub({**FIRMWARE, ".autoforge.toml": "[[checks]\n"})
+    broken.add_issue(7)
+    result = _verified_run(broken, FakeCoder(), FakeVerifier())
+    assert result.outcome is RunOutcome.FAILED and "ChecksConfigError" in (result.error or "")
+
+
+def test_sandbox_failure_fails_the_run_without_publishing() -> None:
+    """If the sandbox cannot run the checks, nothing unverified is published."""
+    fake = FakeGitHub(dict(FIRMWARE))
+    fake.add_issue(7)
+
+    result = _verified_run(fake, FakeCoder(), FakeVerifier(error=VerificationError("sandbox unreachable")))
+
+    assert result.outcome is RunOutcome.FAILED and "sandbox unreachable" in (result.error or "")
+    assert not fake.pulls

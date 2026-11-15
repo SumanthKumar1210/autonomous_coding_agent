@@ -80,7 +80,7 @@ block(EX, 190, EW, 64, "GitHub Webhooks", ["issues · issue_comment events"], "e
 block(EX, 790, EW, 64, "GitHub REST API", ["Issues · Git Data · Pulls"], "ext")
 block(EX, 875, EW, 50, "OpenAI Responses API", ["structured outputs"], "ext")
 block(EX, 935, EW, 46, "Jira Cloud API", [], "ext")
-block(EX, 991, EW, 46, "Container runtime", [], "ext")
+block(EX, 991, EW, 46, "Sandbox container", [], "ext")
 
 # ---------------- band A: app ----------------
 band(40, 150, 1120, 130, "app/  —  entry points & composition root")
@@ -99,7 +99,7 @@ band(40, 310, 1120, 130, "workflow/  —  orchestration")
 block(60, 350, 170, 64, "worker.py", ["authorize → run / resume", "background thread"])
 block(250, 350, 210, 64, "pipeline.py", ["run_ticket · resume_run", "ticket feedback"])
 path("M230,382 H248")
-block(500, 350, 400, 64, "graph.py  (LangGraph)", ["prepare → code ⇄ review → (approve) → publish", "uses agents/context.py · domain/policy.py"])
+block(500, 350, 400, 64, "graph.py  (LangGraph)", ["prepare → code → verify ⇄ review → (approve) → publish", "uses agents/context.py · domain/policy.py · checks.py"])
 block(940, 350, 195, 64, "Checkpoint store", ["SQLite · thread = run_id"])
 path("M320,254 V348", label="Dependencies", lx=328, ly=300, anchor="start")
 path("M460,382 H498")
@@ -121,7 +121,7 @@ port(70, 515, 160, 60, "Coder", "generate()")
 port(300, 515, 160, 60, "Reviewer", "review()")
 port(620, 515, 160, 60, "TicketSource", "get · comment · status")
 port(800, 515, 160, 60, "RepoHost", "read · publish · PR")
-port(980, 515, 160, 60, "Verifier", "verify()", "next")
+port(980, 515, 160, 60, "Verifier", "verify()")
 port(470, 515, 140, 60, "JobStore", "queue · runs")
 
 # ---------------- band D: agents | integrations ----------------
@@ -136,14 +136,14 @@ block(455, 785, 115, 60, "languages.py", ["Python · C rules"])
 
 block(620, 670, 160, 64, "github/issues.py", ["GitHubIssuesSource"])
 block(800, 670, 160, 64, "github/repo.py", ["GitHubRepoHost"])
-block(980, 670, 160, 64, "sandbox/", ["ContainerVerifier"], "next")
+block(980, 670, 160, 64, "sandbox/verifier.py", ["SandboxVerifier"])
 block(620, 785, 160, 60, "sqlite/job_store.py", ["SqliteJobStore"])
 block(980, 785, 160, 60, "jira/", ["implements TicketSource"], "planned")
 path("M620,815 H590 V600 H540 V578", "impl", marker="tri")  # job_store implements JobStore
 block(800, 785, 160, 60, "github/client.py", ["retries · no merge"])
 
 # implements (adapter -> port)
-for cx, kind in ((150, "built"), (380, "built"), (700, "built"), (880, "built"), (1060, "next")):
+for cx, kind in ((150, "built"), (380, "built"), (700, "built"), (880, "built"), (1060, "built")):
     path(f"M{cx},668 V578", "impl", marker="tri")
 add('<text x="160" y="628" class="lbl" text-anchor="start">implements</text>')
 
@@ -158,7 +158,7 @@ path("M880,734 V783")
 path(f"M387,845 V900 H{EX - 2}", label="responses.parse (coder + reviewer)", lx=540, ly=894)
 path(f"M960,800 H970 V760 H1205 V815 H{EX - 2}", label="HTTPS", lx=1090, ly=754)
 path(f"M1060,845 V958 H{EX - 2}", "dashed")
-path(f"M1140,702 H1190 V1014 H{EX - 2}", "dashed")
+path(f"M1140,702 H1190 V1014 H{EX - 2}", label="HTTP · internal network", lx=1182, ly=1006, anchor="end")
 
 # engineer flows
 path(f"M{EX},102 H597 V188", label="dev / re-run", lx=900, ly=96)
@@ -169,7 +169,8 @@ path("M1350,790 V256", label="webhook events", lx=1358, ly=520, anchor="start")
 # ---------------- domain ----------------
 band(40, 1050, 1120, 110, "domain/  —  pure core (no I/O)")
 block(60, 1082, 360, 60, "models.py", ["Ticket · RepoSnapshot · Trigger · Job", "CodeChange · ReviewVerdict · Revision"])
-block(440, 1082, 360, 60, "policy.py", ["validate_change · assert_writable_branch"])
+block(440, 1082, 200, 60, "policy.py", ["validate_change", "assert_writable_branch"])
+block(650, 1082, 150, 60, "checks.py", [".autoforge.toml", "or detection"])
 block(820, 1082, 320, 60, "errors.py", ["TicketError · SafetyError", "AgentError · ReviewRejectedError"])
 path("M24,215 V1048", label="", marker="arrow")
 add('<text x="18" y="640" class="lbl" text-anchor="middle" transform="rotate(-90 18 640)">every layer depends on domain/ (never the reverse)</text>')
@@ -182,7 +183,7 @@ block(610, 1206, 530, 54, "evals/", ["sample tickets · quality scoring of agent
 
 # ---------------- legend ----------------
 ly = 1300
-items = [("built", "Built (Phase 1.1–1.4a)"), ("next", "Next (1.4b verify · 1.4c evals)"),
+items = [("built", "Built (Phase 1.1–1.4b)"), ("next", "Next (1.4c evals)"),
          ("planned", "Planned (later)"), ("ext", "External system"), ("actor", "Actor")]
 x = 40
 for kind, text in items:

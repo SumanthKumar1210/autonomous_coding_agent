@@ -25,6 +25,7 @@ from autoforge.app.config import Settings
 from autoforge.integrations.github.client import GitHubClient
 from autoforge.integrations.github.issues import GitHubIssuesSource
 from autoforge.integrations.github.repo import GitHubRepoHost
+from autoforge.integrations.sandbox.verifier import SandboxVerifier
 from autoforge.integrations.sqlite.job_store import SqliteJobStore
 from autoforge.workflow.graph import checkpoint_serializer
 from autoforge.workflow.pipeline import Dependencies, WorkflowConfig
@@ -70,7 +71,8 @@ def build_dependencies(settings: Settings) -> Iterator[Dependencies]:
 
     Yields:
         ``Dependencies`` with GitHub Issues as tickets, the GitHub repo as repo
-        host, the OpenAI coder and reviewer, and a SQLite checkpointer.
+        host, the OpenAI coder and reviewer, a SQLite checkpointer, and the
+        sandbox verifier when ``SANDBOX_URL`` is set.
     """
     github = GitHubClient(
         settings.github_token.get_secret_value(),
@@ -83,6 +85,8 @@ def build_dependencies(settings: Settings) -> Iterator[Dependencies]:
     db_path = Path(settings.checkpoint_db)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path, check_same_thread=False)
+    verifier = (SandboxVerifier(settings.sandbox_url, timeout=settings.sandbox_timeout_seconds)
+                if settings.sandbox_url else None)
     try:
         yield Dependencies(
             tickets=GitHubIssuesSource(github, label_prefix=settings.trigger_label),
@@ -92,8 +96,11 @@ def build_dependencies(settings: Settings) -> Iterator[Dependencies]:
             reviewer=OpenAIReviewer(openai_client, settings.reviewer_model,
                                     max_output_tokens=settings.openai_max_output_tokens),
             checkpointer=SqliteSaver(conn, serde=checkpoint_serializer()),
+            verifier=verifier,
         )
     finally:
+        if verifier is not None:
+            verifier.close()
         github.close()
         openai_client.close()
         conn.close()

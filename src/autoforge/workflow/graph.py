@@ -1,18 +1,24 @@
-"""The agent graph (LangGraph): coder <-> reviewer loop, approval gate, publish.
+"""The agent graph (LangGraph): coder -> checks -> reviewer loop, approval gate, publish.
 
 ::
 
-    prepare ──► code ──► validate ──► review ──► [approve] ──► publish ──► END
-                 ▲           │            │          │
-                 └─ policy ──┘            │          └─ human rejects ──► END
-                 └──── review findings ───┘
+    prepare ──► code ──► validate ──► verify ──► review ──► [approve] ──► publish ──► END
+                 ▲           │           │           │          │
+                 └─ policy ──┘           │           │          └─ human rejects ──► END
+                 └──── failing checks ───┘           │
+                 └───────────── review findings ─────┘
 
 Nodes (each one step, each returns a ``Command`` naming the next node):
 
-- **prepare** - build the repository snapshot for the agents.
+- **prepare** - build the repository snapshot for the agents and choose the
+  checks (``domain.checks``, from the default branch).
 - **code** - the coder proposes a change (on a retry: with ``Revision`` feedback).
 - **validate** - ``domain.policy`` checks the change. A violation goes back to
   the coder as feedback (it is a correctable agent mistake), until attempts run out.
+- **verify** - the ``Verifier`` (sandbox container) applies the change to the
+  base commit and runs the checks. A check the change broke goes back to the
+  coder with its output; failures that also exist on the base do not count.
+  Skipped (and said so in the PR) when no sandbox or no checks are configured.
 - **review** - the reviewer judges the change. Rejected -> back to the coder
   with the findings; still rejected after ``max_attempts`` -> ``ReviewRejectedError``.
 - **approve** - only if ``require_approval``: the graph *interrupts* here and
@@ -42,9 +48,12 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, interrupt
 
 from autoforge.agents.context import build_snapshot
-from autoforge.domain.errors import ChangeValidationError, ReviewRejectedError
+from autoforge.domain.checks import CHECKS_CONFIG, checks_for
+from autoforge.domain.errors import ChangeValidationError, ChecksFailedError, ReviewRejectedError
 from autoforge.domain.models import (
     BaseRef,
+    CheckResult,
+    CheckSpec,
     CodeChange,
     ContextFile,
     FileChange,
@@ -55,16 +64,17 @@ from autoforge.domain.models import (
     Revision,
     Ticket,
     TokenUsage,
+    VerificationReport,
 )
 from autoforge.domain.policy import validate_change
-from autoforge.ports import Coder, RepoHost, Reviewer
+from autoforge.ports import Coder, RepoHost, Reviewer, Verifier
 
 log = logging.getLogger(__name__)
 
 CHECKPOINT_TYPES: tuple[type, ...] = (
     Ticket, BaseRef, RepoSnapshot, ContextFile, CodeChange, FileChange, ReviewVerdict, ReviewFinding, Revision,
     TokenUsage,
-    PullRequest,
+    PullRequest, CheckSpec, CheckResult, VerificationReport,
 )
 """Every non-builtin type stored in ``RunState``; the only types a checkpoint may restore."""
 
@@ -90,8 +100,10 @@ class RunState(TypedDict, total=False):
         branch: Agent branch the change will be published to.
         ticket: The loaded ticket.
         snapshot: Repository context shown to both agents.
+        checks: Checks chosen from the default branch (empty: none, or no sandbox).
         change: The coder's latest proposed change.
         revision: Feedback for the coder's next attempt (``None`` once addressed).
+        verification: Result of running the checks on the latest change.
         verdict: The reviewer's latest verdict.
         attempts: Number of coder attempts so far.
         usage: Total token usage of all LLM calls in the run.
@@ -107,8 +119,10 @@ class RunState(TypedDict, total=False):
     branch: str
     ticket: Ticket
     snapshot: RepoSnapshot
+    checks: list[CheckSpec]
     change: CodeChange
     revision: Revision | None
+    verification: VerificationReport
     verdict: ReviewVerdict
     attempts: int
     usage: TokenUsage
@@ -154,6 +168,7 @@ def build_graph(
     checkpointer: Checkpointer,
     settings: GraphSettings,
     pr_body: PrBodyBuilder,
+    verifier: Verifier | None = None,
 ) -> AgentGraph:
     """Build and compile the agent graph.
 
@@ -164,18 +179,24 @@ def build_graph(
         checkpointer: Where run state is saved after every node.
         settings: Attempt limit, approval gate, context budget.
         pr_body: Builds the PR description from the final state.
+        verifier: Runs the repository's checks in the sandbox; ``None`` skips verification.
 
     Returns:
         The compiled graph. Run it with
         ``graph.invoke(state, {"configurable": {"thread_id": run_id}})``.
     """
 
+    archives: dict[str, bytes] = {}  # base commit -> archive, downloaded once per run for all attempts
+
     def prepare(state: RunState) -> Command[Literal["code"]]:
-        """Build the repository snapshot both agents will see, with context chosen for the ticket."""
+        """Build the snapshot both agents will see (context chosen for the ticket) and choose the checks."""
         snapshot = build_snapshot(repo, state["ticket"], max_context_bytes=settings.max_context_bytes,
                                   max_file_bytes=settings.max_file_bytes)
-        return Command(goto="code", update={"snapshot": snapshot, "attempts": 0, "usage": TokenUsage(),
-                                            "revision": None})
+        checks = _choose_checks(repo, snapshot.base) if verifier is not None else []
+        if verifier is not None:
+            log.info("checks chosen", extra={"checks": [c.name for c in checks]})
+        return Command(goto="code", update={"snapshot": snapshot, "checks": checks, "attempts": 0,
+                                            "usage": TokenUsage(), "revision": None})
 
     def code(state: RunState) -> Command[Literal["validate"]]:
         """Ask the coder for a change (with feedback, if this is a revision)."""
@@ -187,7 +208,7 @@ def build_graph(
             "coder_model": result.model, "revision": None,
         })
 
-    def validate(state: RunState) -> Command[Literal["review", "code"]]:
+    def validate(state: RunState) -> Command[Literal["verify", "code"]]:
         """Check the change against the change policy; send violations back to the coder."""
         try:
             validate_change(state["change"], state["snapshot"])
@@ -197,7 +218,31 @@ def build_graph(
                 raise
             feedback = f"Change policy violation (the change was not accepted): {exc}"
             return Command(goto="code", update={"revision": Revision(state["change"], feedback)})
-        return Command(goto="review")
+        return Command(goto="verify")
+
+    def verify(state: RunState) -> Command[Literal["review", "code"]]:
+        """Run the checks on the change in the sandbox; send checks it broke back to the coder."""
+        checks = state.get("checks", [])
+        if verifier is None:
+            report = VerificationReport(skipped="no verification sandbox configured (SANDBOX_URL)")
+        elif not checks:
+            report = VerificationReport(skipped="no checks configured or detected")
+        else:
+            base = state["snapshot"].base
+            if base.commit_sha not in archives:
+                archives.clear()
+                archives[base.commit_sha] = repo.download_archive(base)
+            report = verifier.verify(archives[base.commit_sha], state["change"], checks)
+        log.info("verification", extra={"attempt": state["attempts"], "passed": report.passed,
+                                        "skipped": report.skipped or None,
+                                        "checks": {c.name: c.status + (" (preexisting)" if c.preexisting else "")
+                                                   for c in report.checks}})
+        if report.passed:
+            return Command(goto="review", update={"verification": report})
+        if state["attempts"] >= settings.max_attempts:
+            raise ChecksFailedError(_checks_failed_message(report, state["attempts"]))
+        return Command(goto="code", update={"verification": report,
+                                            "revision": Revision(state["change"], format_check_failures(report))})
 
     def review(state: RunState) -> Command[Literal["approve", "publish", "code"]]:
         """Ask the reviewer for a verdict; loop back to the coder on rejection."""
@@ -244,6 +289,7 @@ def build_graph(
     graph.add_node("prepare", prepare)
     graph.add_node("code", code)
     graph.add_node("validate", validate)
+    graph.add_node("verify", verify)
     graph.add_node("review", review)
     graph.add_node("approve", approve)
     graph.add_node("publish", publish)
@@ -270,3 +316,47 @@ def _rejection_message(verdict: ReviewVerdict, attempts: int) -> str:
                          for f in verdict.blocking_findings)
     return (f"The reviewer did not approve the change after {attempts} attempt(s).\n\n"
             f"{verdict.summary}\n\nUnresolved findings:\n{findings}")
+
+
+CHECK_OUTPUT_FEEDBACK = 3000
+"""Characters of each failing check's output sent back to the coder (the end of the output)."""
+
+
+def _choose_checks(repo: RepoHost, base: BaseRef) -> list[CheckSpec]:
+    """Choose the checks from the default branch: ``.autoforge.toml`` if present, else detection.
+
+    Raises:
+        ChecksConfigError: If ``.autoforge.toml`` is invalid.
+    """
+    files = repo.list_files(base)
+    wanted = [f for f in files if f.path in (CHECKS_CONFIG, "pyproject.toml") and f.mode != "120000"]
+    contents = {path: data.decode("utf-8", errors="replace") for path, data in repo.read_files(base, wanted).items()}
+    return checks_for([f.path for f in files], config=contents.get(CHECKS_CONFIG),
+                      pyproject=contents.get("pyproject.toml"))
+
+
+def format_check_failures(report: VerificationReport) -> str:
+    """Render the checks a change broke as coder feedback: name, command, exit status, end of output."""
+    lines = ["Repository checks failed in the sandbox (the change was not accepted). "
+             "These checks pass on the base commit, so the change broke them; fix the cause:"]
+    for c in report.new_failures:
+        lines.append(f"\n### {c.name} ({_status_text(c)})\n$ {c.command}\n{c.output[-CHECK_OUTPUT_FEEDBACK:]}")
+    return "\n".join(lines)
+
+
+def _status_text(check: CheckResult) -> str:
+    """E.g. ``"exit code 2"``, ``"timed out"`` or ``"could not run"``."""
+    if check.status == "timeout":
+        return "timed out"
+    if check.status == "error":
+        return "could not run"
+    return f"exit code {check.exit_code}"
+
+
+def _checks_failed_message(report: VerificationReport, attempts: int) -> str:
+    """Build the ``ChecksFailedError`` message (posted on the ticket as Markdown)."""
+    parts = [f"The change still broke repository checks after {attempts} attempt(s)."]
+    for c in report.new_failures:
+        output = c.output[-1500:].replace("`" * 3, "'" * 3)
+        parts.append(f"**{c.name}** ({_status_text(c)}): `{c.command}`\n```\n{output}\n```")
+    return "\n\n".join(parts)

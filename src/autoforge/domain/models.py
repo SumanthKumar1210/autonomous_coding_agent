@@ -157,6 +157,83 @@ class PullRequest:
     url: str
 
 
+# ------------------------------------------------------------ verification
+
+
+@dataclass(frozen=True)
+class CheckSpec:
+    """One repository check run in the sandbox before a change is published.
+
+    Chosen from the *default branch* (``.autoforge.toml`` or auto-detection),
+    never from the agent's change, so the agent cannot pick its own checks.
+
+    Attributes:
+        name: Short label shown in logs, feedback and the PR, e.g. ``"cmake: firmware"``.
+        command: Shell command run from the repository root, e.g. ``"python -m pytest -q"``.
+        timeout_seconds: The check fails as ``timeout`` after this long.
+    """
+
+    name: str
+    command: str
+    timeout_seconds: int = 600
+
+
+CheckStatus = Literal["passed", "failed", "timeout", "error"]
+"""Result of one check: exit code 0, non-zero exit, killed after its timeout, or could not run."""
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    """What one check did on the changed repository.
+
+    Attributes:
+        name: The check's name.
+        command: The command that ran.
+        status: ``passed`` / ``failed`` / ``timeout`` / ``error``.
+        exit_code: Process exit code, if it exited.
+        output: The end of the combined stdout/stderr (truncated).
+        duration_seconds: Wall-clock time of the check.
+        preexisting: ``True`` if the check also fails on the unchanged base
+            commit, so the failure is not caused by the change.
+    """
+
+    name: str
+    command: str
+    status: CheckStatus
+    exit_code: int | None = None
+    output: str = ""
+    duration_seconds: float = 0.0
+    preexisting: bool = False
+
+    @property
+    def passed(self) -> bool:
+        """True if the check exited with code 0."""
+        return self.status == "passed"
+
+
+@dataclass(frozen=True)
+class VerificationReport:
+    """Outcome of running the repository's checks on a proposed change.
+
+    Attributes:
+        checks: One result per check, in order.
+        skipped: Why no checks ran (e.g. ``"no checks found"``); empty if they ran.
+    """
+
+    checks: list[CheckResult] = field(default_factory=list)
+    skipped: str = ""
+
+    @property
+    def new_failures(self) -> list[CheckResult]:
+        """Checks that fail on the change but pass on the base commit (caused by the change)."""
+        return [c for c in self.checks if not c.passed and not c.preexisting]
+
+    @property
+    def passed(self) -> bool:
+        """True if the change broke no check (pre-existing failures do not count)."""
+        return not self.new_failures
+
+
 # --------------------------------------------- agent output (LLM structured output)
 # OpenAI strict JSON schema rules: every field is required and has no default.
 #

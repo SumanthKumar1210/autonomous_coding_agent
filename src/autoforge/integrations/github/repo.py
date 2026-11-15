@@ -117,6 +117,10 @@ class GitHubRepoHost:
             return {f.path: self._gh.get_blob(f.blob_id) for f in files[:BLOB_READ_LIMIT]}
         return _unpack(archive, {f.path for f in files})
 
+    def download_archive(self, base: BaseRef) -> bytes:
+        """Download the repository at ``base`` as a gzipped tarball (at most ``MAX_ARCHIVE_BYTES``)."""
+        return self._gh.download_tarball(base.commit_sha, max_bytes=MAX_ARCHIVE_BYTES)
+
     def find_open_pull(self, branch: str) -> PullRequest | None:
         """Return the open PR from ``branch``, or ``None`` (used for idempotency)."""
         pr = self._gh.find_open_pull(branch)

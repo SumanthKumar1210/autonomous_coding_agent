@@ -41,7 +41,8 @@ turns a ticket into a reviewed pull request.
 | 2. Multi-agent orchestration | **LangGraph** graph: coder ↔ reviewer/critic loop (bounded attempts, policy violations fed back to the coder), SQLite checkpoints, optional human-approval interrupt | ✅ Built |
 | 3. Service & delivery | **FastAPI** webhook service (HMAC-verified, write-access check), durable SQLite job queue + background worker, idempotent runs (redelivery and re-label dedupe), `/autoforge approve` comments, Docker image + compose, GitHub Actions CI (ruff, mypy --strict, pytest, Docker build) | ✅ Built, 115 automated tests |
 | 4a. Context + C | **Ticket-driven repo-context retrieval** (identifiers, file names and keywords from the issue → defining files, header/source pairs, includes/imports, tests, callers, build files; excerpts for large files; reasons listed in the PR), **C support** with language-specific rules for coder and reviewer | ✅ Built, 143 automated tests |
-| 4b–c. Quality | Sandboxed pre-PR verification (build/tests/lint), evaluation harness measuring context recall and reviewer lift | ⚪ Next |
+| 4b. Verification | **Sandboxed pre-PR checks**: the repo's CMake build + CTest, pytest and ruff (or `.autoforge.toml`) run on the change in a separate, offline, unprivileged sandbox container; checks the change broke go back to the coder with their output, pre-existing failures are flagged, results are listed in the PR | ✅ Built, 182 automated tests |
+| 4c. Evals | Evaluation harness measuring context recall and reviewer lift | ⚪ Next |
 | Later | Jira as a second ticket source (pluggable `TicketSource` port) | ⚪ Planned |
 
 ## Architecture
@@ -73,7 +74,7 @@ flowchart LR
         end
 
         POLICY["Policy and safety layer<br/>path rules · PR-only · injection guard"]
-        VERIFY["Verification sandbox<br/>lint · tests · MISRA C"]
+        VERIFY["Verification sandbox<br/>build · tests · lint"]
         OBS["Observability<br/>run IDs · JSON logs · token cost"]
     end
 
@@ -96,8 +97,8 @@ flowchart LR
     CODER --> POLICY
     REVIEW --> POLICY
     TESTGEN -.-> VERIFY
-    POLICY --> PR
-    POLICY -.-> VERIFY -.-> PR
+    POLICY --> VERIFY -->|failing checks| CODER
+    VERIFY --> PR
     HIL -.-> BENCH
     CODER <--> LLM
     REVIEW <--> LLM
@@ -108,11 +109,11 @@ flowchart LR
     classDef built fill:#d4f7dc,stroke:#1a7f37,color:#0b3d1a
     classDef next fill:#fff4cc,stroke:#bf8700,color:#4d3800
     classDef planned fill:#f0f0f0,stroke:#8c959f,color:#57606a,stroke-dasharray:4 3
-    class GHI,ENTRY,ORCH,CTX,CODER,REVIEW,POLICY,OBS,PR,HUMAN,LLM built
-    class JIRA,POL,TESTGEN,REQ,HIL,VERIFY,BENCH planned
+    class GHI,ENTRY,ORCH,CTX,CODER,REVIEW,POLICY,VERIFY,OBS,PR,HUMAN,LLM built
+    class JIRA,POL,TESTGEN,REQ,HIL,BENCH planned
 ```
 
-<sub>🟩 built (Phase 1.1–1.4a) · ⬜ planned (Phase 1.4b–c and Phases 2–4) · solid
+<sub>🟩 built (Phase 1.1–1.4b) · ⬜ planned (Phase 1.4c and Phases 2–4) · solid
 arrows = working today, dashed = planned.</sub>
 
 Layers, ports and the per-run sequence diagram are in
@@ -144,7 +145,7 @@ Python 3.11 · OpenAI Responses API (structured outputs) · LangGraph (SQLite ch
 · FastAPI / uvicorn · GitHub REST API and webhooks · pydantic / pydantic-settings · httpx
 · SQLite · pytest · ruff · mypy (strict) · Docker · GitHub Actions
 
-## How it works today (Phase 1, increments 1–4a)
+## How it works today (Phase 1, increments 1–4b)
 
 A maintainer adds the `autoforge` label to an issue. GitHub sends a webhook to
 the AutoForge service, which verifies its HMAC signature, drops duplicates,
@@ -168,19 +169,25 @@ who added the label has write access, then runs the LangGraph agent graph
    under `.git/` or `.github/workflows/`, and a file can only be modified if
    the agent saw its current content. A violation goes back to the coder as
    feedback.
-5. **Reviewer agent** checks the change against the ticket's acceptance
+5. **Checks in the sandbox**: the change is applied to the base commit in a
+   separate container with no internet access, and the repository's checks run
+   there (CMake build + CTest, pytest, ruff, or the commands in
+   `.autoforge.toml`). A check the change broke goes back to the coder with the
+   end of its output; a check that also fails on the base commit is flagged in
+   the PR but not blamed on the change.
+6. **Reviewer agent** checks the change against the ticket's acceptance
    criteria, correctness, safety and repo conventions, and returns a verdict
    with findings graded blocker / major / minor. Blocking findings go back to
    the coder, up to `MAX_ATTEMPTS` (default 3). If the reviewer still rejects,
    no PR is opened and the findings are posted on the issue.
-6. **Optional human approval** (`REQUIRE_APPROVAL=true`): the graph pauses and
+7. **Optional human approval** (`REQUIRE_APPROVAL=true`): the graph pauses and
    checkpoints its state. A maintainer comments `/autoforge approve` to
    publish the reviewed change, or `/autoforge reject` to discard it. The run
    survives a restart in between.
-7. Commits to `autoforge/issue-<N>` and opens a PR against the default branch
-   (`Closes #N`), including the review outcome, any non-blocking reviewer
+8. Commits to `autoforge/issue-<N>` and opens a PR against the default branch
+   (`Closes #N`), including the checks that ran, the review outcome, any non-blocking reviewer
    notes, and the run's total token usage.
-8. Comments the PR link on the issue and labels it `autoforge:pr-opened`. If
+9. Comments the PR link on the issue and labels it `autoforge:pr-opened`. If
    the run fails, it labels the issue `autoforge:failed` and comments why.
 
 Duplicates are handled at every level. A webhook GitHub redelivers is processed

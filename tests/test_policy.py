@@ -32,9 +32,9 @@ def test_valid_change_passes() -> None:
 
 
 @pytest.mark.parametrize("path", ["/etc/passwd", "../x.py", "src/../../x.py", "./a.py", "a\\b.py", "",
-                                  ".git/config", ".github/workflows/ci.yml", "src//a.py"])
+                                  ".git/config", ".github/workflows/ci.yml", "src//a.py", ".autoforge.toml"])
 def test_rejects_unsafe_paths(path: str) -> None:
-    """Absolute, escaping, malformed and forbidden (.git, CI) paths are rejected."""
+    """Absolute, escaping, malformed and forbidden (.git, CI, check config) paths are rejected."""
     with pytest.raises(ChangeValidationError):
         validate_change(_change(_f(path)), SNAPSHOT)
 

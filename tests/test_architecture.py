@@ -25,6 +25,10 @@ FORBIDDEN: dict[str, tuple[str, ...]] = {
     "workflow": ("autoforge.integrations", "autoforge.app", "autoforge.agents.coder", "autoforge.agents.reviewer",
                  "autoforge.agents.llm", "openai", "httpx", *_WEB, *_STORAGE),
     "integrations": ("autoforge.workflow", "autoforge.app", "autoforge.agents", "openai", "langgraph", *_WEB),
+    # The sandbox runs in its own container with only the standard library installed.
+    "sandbox": ("autoforge.domain", "autoforge.ports", "autoforge.agents", "autoforge.workflow",
+                "autoforge.integrations", "autoforge.app", "autoforge.observability", "openai", "httpx", "langgraph",
+                "pydantic", *_WEB, *_STORAGE),
 }
 
 

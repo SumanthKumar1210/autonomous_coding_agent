@@ -63,8 +63,8 @@ steps = [
     ("Understand", ["reads the ticket", "+ repository code"], "green", None, False),
     ("Write code", ["Coder agent", "(LLM)"], "green", None, False),
     ("Safety checks", ["blocks unsafe or", "out-of-scope edits"], "green", None, False),
+    ("Verify", ["build & tests", "in a sandbox"], "green", None, False),
     ("Review", ["Reviewer agent", "sends fixes back"], "green", None, False),
-    ("Verify", ["lint & tests", "in a sandbox"], "grey", "PLANNED", True),
 ]
 xs = [310, 456, 602, 748, 894]
 for i, ((title, lines, color, tag, dashed), x) in enumerate(zip(steps, xs)):
@@ -72,7 +72,7 @@ for i, ((title, lines, color, tag, dashed), x) in enumerate(zip(steps, xs)):
     if i < len(xs) - 1:
         arrow(f"M{x + 132},238 H{xs[i + 1] - 2}")
 # review -> write code feedback loop
-arrow("M814,172 V152 H522 V170", "fixes (bounded loop)", 668, 147)
+arrow("M960,172 V152 H522 V170", "fixes (bounded loop)", 741, 147)
 # trace banner
 add('<rect x="640" y="322" width="386" height="66" rx="10" fill="#ffffff" stroke="#d0d7de"/>')
 add('<text x="833" y="343" font-size="13" font-weight="600" fill="#1f2328" text-anchor="middle">'
