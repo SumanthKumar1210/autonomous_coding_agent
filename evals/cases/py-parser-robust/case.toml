@@ -1,0 +1,28 @@
+repo = "bms_py"
+title = "parse_log fails on real logger files (header, comments, blank lines)"
+body = """
+Files from the data logger start with a header line and contain `#` comments and blank lines, and
+`parse_log` raises on all of them. When a line really is broken, the error does not say which line.
+
+## Acceptance criteria
+
+- `parse_log` skips blank (or whitespace-only) lines, lines whose first non-space character is `#`,
+  and a header line starting with `time_ms` if it is the first line that is neither blank nor a comment.
+- A malformed line raises `LogFormatError` whose `line_no` is the 1-based line number in the input
+  text (skipped lines count).
+- All samples must have the same number of cells; a line with a different count raises
+  `LogFormatError` with its `line_no`.
+- `parse_line` behaves as before for valid input.
+- Tests in `tests/test_log_parser.py`.
+"""
+
+[expect]
+context = ["bmstools/log_parser.py", "tests/test_log_parser.py"]
+changed = ["bmstools/log_parser.py", "tests/test_log_parser.py"]
+unchanged = ["bmstools/stats.py", "bmstools/report.py", "pyproject.toml"]
+contains = []
+
+[[hidden_checks]]
+name = "acceptance"
+run = "python -m pytest -q -p no:cacheprovider .autoforge-eval"
+timeout = 300

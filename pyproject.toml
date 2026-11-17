@@ -35,6 +35,8 @@ markers = ["integration: talks to the real sandbox repo; opt-in with AUTOFORGE_I
 line-length = 120
 target-version = "py311"
 src = ["src", "tests"]
+# Eval fixtures are data with their own lint config; `autoforge eval validate` checks them in the sandbox.
+extend-exclude = ["evals/repos", "evals/cases"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]

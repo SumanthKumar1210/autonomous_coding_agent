@@ -14,20 +14,26 @@ PKG = Path(__file__).resolve().parents[1] / "src" / "autoforge"
 # integrations/ (the LangGraph SQLite checkpointer is created in app/wiring.py).
 _WEB = ("fastapi", "starlette", "uvicorn")
 _STORAGE = ("sqlite3", "langgraph.checkpoint.sqlite")
+_EVALS = "autoforge.evals"  # the eval harness: only app/ may use it, production code never
 
 FORBIDDEN: dict[str, tuple[str, ...]] = {
     "domain": ("autoforge.ports", "autoforge.agents", "autoforge.workflow", "autoforge.integrations",
-               "autoforge.app", "openai", "httpx", "langgraph", *_WEB, *_STORAGE),
-    "ports": ("autoforge.agents", "autoforge.workflow", "autoforge.integrations", "autoforge.app", "openai", "httpx",
-              "langgraph", *_WEB, *_STORAGE),
-    "agents": ("autoforge.workflow", "autoforge.integrations", "autoforge.app", "httpx", "langgraph", *_WEB, *_STORAGE),
+               "autoforge.app", _EVALS, "openai", "httpx", "langgraph", *_WEB, *_STORAGE),
+    "ports": ("autoforge.agents", "autoforge.workflow", "autoforge.integrations", "autoforge.app", _EVALS, "openai",
+              "httpx", "langgraph", *_WEB, *_STORAGE),
+    "agents": ("autoforge.workflow", "autoforge.integrations", "autoforge.app", _EVALS, "httpx", "langgraph", *_WEB,
+               *_STORAGE),
     # The workflow may use LangGraph and the deterministic context builder, but never a concrete LLM agent.
     "workflow": ("autoforge.integrations", "autoforge.app", "autoforge.agents.coder", "autoforge.agents.reviewer",
-                 "autoforge.agents.llm", "openai", "httpx", *_WEB, *_STORAGE),
-    "integrations": ("autoforge.workflow", "autoforge.app", "autoforge.agents", "openai", "langgraph", *_WEB),
+                 "autoforge.agents.llm", _EVALS, "openai", "httpx", *_WEB, *_STORAGE),
+    "integrations": ("autoforge.workflow", "autoforge.app", "autoforge.agents", _EVALS, "openai", "langgraph", *_WEB),
+    # The eval harness drives the real graph like the pipeline does: through ports, never concrete adapters or SDKs.
+    "evals": ("autoforge.integrations", "autoforge.app", "autoforge.agents.coder", "autoforge.agents.reviewer",
+              "autoforge.agents.llm", "openai", "httpx", *_WEB, *_STORAGE),
     # The sandbox runs in its own container with only the standard library installed.
     "sandbox": ("autoforge.domain", "autoforge.ports", "autoforge.agents", "autoforge.workflow",
-                "autoforge.integrations", "autoforge.app", "autoforge.observability", "openai", "httpx", "langgraph",
+                "autoforge.integrations", "autoforge.app", "autoforge.observability", _EVALS, "openai", "httpx",
+                "langgraph",
                 "pydantic", *_WEB, *_STORAGE),
 }
 

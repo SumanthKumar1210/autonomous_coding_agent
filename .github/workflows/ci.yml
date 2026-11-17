@@ -51,4 +51,5 @@ jobs:
         run: |
           docker run --rm autoforge:ci autoforge --help
           docker run --rm autoforge:ci python -c "import autoforge.app.webhook"
+          docker run --rm autoforge:ci autoforge eval context   # suite ships in the image; no LLM, no secrets
           docker run --rm autoforge-sandbox:ci sh -c 'cmake --version && gcc --version && python -I -m autoforge.sandbox.server --help'

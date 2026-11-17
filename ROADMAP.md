@@ -17,7 +17,9 @@ Deployed as a service. See `CLAUDE.md` for exact scope. Increments:
    with existing repo checks, evaluation harness (measure reviewer lift).
    - 4a ✅ Ticket-driven context retrieval + C support (language rules for coder and reviewer).
    - 4b ✅ Sandboxed pre-PR verification (build, tests, linters) with feedback to the coder.
-   - 4c ⚪ Evaluation harness (context recall, change quality, reviewer lift).
+   - 4c ✅ Evaluation harness: fixture suite (C + Python), real graph on a local repo host, hidden
+     acceptance tests + repo checks in the sandbox, variants for check-feedback and reviewer lift,
+     JSON/Markdown reports and `compare`.
 
 ## Deferred: Jira integration
 No Jira access yet. When available, add Jira Cloud as a second `TicketSource`
@@ -49,3 +51,6 @@ of implementing them now.
   persistent `/data` volume and a secret store; Postgres checkpointer and job
   queue if more than one replica is ever needed.
 - **Multiple target repos** from one service (route webhooks by repository).
+- **Eval suite growth**: more cases (e.g. a snapshot of the real firmware repo, larger repos that
+  exercise excerpts, underspecified tickets), and running `eval run` on a schedule or on PRs that
+  touch `agents/` (needs a CI secret and a sandbox in CI; costs tokens per run).

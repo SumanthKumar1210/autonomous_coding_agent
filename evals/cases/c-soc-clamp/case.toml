@@ -1,0 +1,28 @@
+repo = "bms_c"
+title = "SOC exceeds 100 % after charging a full pack"
+body = """
+Field logs show `soc_get_pct()` reporting 104 % after the charger kept a full pack on float charge,
+and 255 % right after a deep discharge.
+
+Coulomb counting must saturate: the stored charge stays within 0 .. capacity, so the estimate never
+leaves 0-100 % and responds immediately when the current reverses (for example, a short discharge
+after an over-full charge must lower the SOC below 100 %).
+
+## Acceptance criteria
+
+- `soc_update()` clamps the stored charge to [0, capacity] after every step.
+- `soc_get_pct()` always returns 0-100.
+- The public API in `soc.h` is unchanged.
+- Regression tests in `tests/test_soc.c`.
+"""
+
+[expect]
+context = ["include/soc.h", "src/soc.c", "tests/test_soc.c"]
+changed = ["src/soc.c", "tests/test_soc.c"]
+unchanged = ["include/soc.h", "include/hal.h", "src/cell_monitor.c", "CMakeLists.txt"]
+contains = []
+
+[[hidden_checks]]
+name = "acceptance"
+run = 'gcc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude -Itests src/*.c tests/hal_stub.c .autoforge-eval/acceptance.c -o "$TMPDIR/acceptance" && "$TMPDIR/acceptance"'
+timeout = 300

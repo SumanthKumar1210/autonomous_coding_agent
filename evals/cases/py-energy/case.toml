@@ -1,0 +1,27 @@
+repo = "bms_py"
+title = "Report the energy throughput of a log"
+body = """
+Add the energy that went into or out of the pack to the statistics and to the report.
+
+## Acceptance criteria
+
+- New function `energy_wh(samples) -> float` in `bmstools/stats.py`. It integrates pack power (pack
+  voltage x current) over time with the trapezoidal rule and returns watt-hours; positive means energy
+  went into the pack (charging).
+- Fewer than two samples give `0.0`. Timestamps that do not strictly increase raise `ValueError`.
+- `report.summary` ends with a new line `Energy: <value> Wh` with two decimals, e.g. `Energy: 1.25 Wh`.
+- Tests for both.
+"""
+
+[expect]
+context = ["bmstools/stats.py", "bmstools/report.py", "tests/test_stats.py", "tests/test_report.py"]
+changed = ["bmstools/stats.py", "bmstools/report.py", "tests/test_stats.py", "tests/test_report.py"]
+unchanged = ["bmstools/log_parser.py", "pyproject.toml"]
+contains = [
+    { path = "bmstools/stats.py", pattern = 'def energy_wh\(' },
+]
+
+[[hidden_checks]]
+name = "acceptance"
+run = "python -m pytest -q -p no:cacheprovider .autoforge-eval"
+timeout = 300

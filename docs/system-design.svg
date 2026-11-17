@@ -203,23 +203,21 @@
 <rect x="60" y="1206" width="530" height="54" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="325.0" y="1230.0" class="t">observability.py</text>
 <text x="325.0" y="1246.0" class="s">JSON logs · run_id context · token usage — used by all layers</text>
-<rect x="610" y="1206" width="530" height="54" rx="8" fill="#fff4cc" stroke="#bf8700" stroke-width="1.6"/>
+<rect x="610" y="1206" width="530" height="54" rx="8" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.6"/>
 <text x="875.0" y="1230.0" class="t">evals/</text>
-<text x="875.0" y="1246.0" class="s">sample tickets · quality scoring of agents</text>
+<text x="875.0" y="1246.0" class="s">fixture tickets · real graph, local repo · reviewer lift</text>
 <rect x="40" y="1300" width="26" height="16" rx="4" fill="#d4f7dc" stroke="#1a7f37" stroke-width="1.5"/>
-<text x="74" y="1313" font-size="12" fill="#1f2328">Built (Phase 1.1–1.4b)</text>
-<rect x="247.2" y="1300" width="26" height="16" rx="4" fill="#fff4cc" stroke="#bf8700" stroke-width="1.5"/>
-<text x="281.2" y="1313" font-size="12" fill="#1f2328">Next (1.4c evals)</text>
-<rect x="421.4" y="1300" width="26" height="16" rx="4" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
-<text x="455.4" y="1313" font-size="12" fill="#1f2328">Planned (later)</text>
-<rect x="582.4" y="1300" width="26" height="16" rx="4" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
-<text x="616.4" y="1313" font-size="12" fill="#1f2328">External system</text>
-<rect x="743.4" y="1300" width="26" height="16" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
-<text x="777.4" y="1313" font-size="12" fill="#1f2328">Actor</text>
-<path d="M838.4,1308 H874.4" class="ln" marker-end="url(#arrow)"/>
-<text x="882.4" y="1313" font-size="12" fill="#1f2328">call / data flow</text>
-<path d="M988.4,1308 H1024.4" class="ln dash" marker-end="url(#arrow)"/>
-<text x="1032.4" y="1313" font-size="12" fill="#1f2328">planned flow</text>
-<path d="M1118.4,1308 H1154.4" class="ln impl" marker-end="url(#tri)"/>
-<text x="1162.4" y="1313" font-size="12" fill="#1f2328">implements port</text>
+<text x="74" y="1313" font-size="12" fill="#1f2328">Built (Phase 1.1–1.4c)</text>
+<rect x="247.2" y="1300" width="26" height="16" rx="4" fill="#f3f4f6" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="281.2" y="1313" font-size="12" fill="#1f2328">Planned (later)</text>
+<rect x="408.2" y="1300" width="26" height="16" rx="4" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
+<text x="442.2" y="1313" font-size="12" fill="#1f2328">External system</text>
+<rect x="569.2" y="1300" width="26" height="16" rx="4" fill="#fbefff" stroke="#8250df" stroke-width="1.5"/>
+<text x="603.2" y="1313" font-size="12" fill="#1f2328">Actor</text>
+<path d="M664.2,1308 H700.2" class="ln" marker-end="url(#arrow)"/>
+<text x="708.2" y="1313" font-size="12" fill="#1f2328">call / data flow</text>
+<path d="M814.2,1308 H850.2" class="ln dash" marker-end="url(#arrow)"/>
+<text x="858.2" y="1313" font-size="12" fill="#1f2328">planned flow</text>
+<path d="M944.2,1308 H980.2" class="ln impl" marker-end="url(#tri)"/>
+<text x="988.2" y="1313" font-size="12" fill="#1f2328">implements port</text>
 </svg>

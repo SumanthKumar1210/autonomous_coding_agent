@@ -1,0 +1,30 @@
+repo = "bms_c"
+title = "Detect cell voltage imbalance in the cell monitor"
+body = """
+Cells drift apart over time. The BMS must flag a pack whose cells are too far apart.
+
+## Acceptance criteria
+
+- New fault code `FAULT_CELL_IMBALANCE` in `fault_code_t` (before `FAULT_COUNT`).
+- New constant `CELL_IMBALANCE_MV` (100 mV) in `cell_monitor.h`.
+- New function `uint16_t cell_monitor_imbalance_mv(void)`: highest minus lowest cell voltage of the
+  last successful update (0 before the first update).
+- `cell_monitor_update()` sets `FAULT_CELL_IMBALANCE` when the imbalance is strictly greater than
+  `CELL_IMBALANCE_MV` and clears it otherwise.
+- A failed cell read leaves the imbalance and its fault unchanged.
+- Unit tests in `tests/test_cell_monitor.c` cover the new behaviour.
+"""
+
+[expect]
+context = ["include/cell_monitor.h", "src/cell_monitor.c", "include/fault.h", "tests/test_cell_monitor.c"]
+changed = ["include/cell_monitor.h", "src/cell_monitor.c", "include/fault.h", "tests/test_cell_monitor.c"]
+unchanged = ["include/hal.h", "tests/hal_stub.c", "src/soc.c", "CMakeLists.txt"]
+contains = [
+    { path = "include/cell_monitor.h", pattern = 'uint16_t\s+cell_monitor_imbalance_mv\s*\(\s*void\s*\)' },
+    { path = "include/fault.h", pattern = 'FAULT_CELL_IMBALANCE[\s\S]*FAULT_COUNT' },
+]
+
+[[hidden_checks]]
+name = "acceptance"
+run = 'gcc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude -Itests src/*.c tests/hal_stub.c .autoforge-eval/acceptance.c -o "$TMPDIR/acceptance" && "$TMPDIR/acceptance"'
+timeout = 300

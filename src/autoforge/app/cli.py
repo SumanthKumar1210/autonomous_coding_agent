@@ -6,6 +6,7 @@ Usage::
     autoforge run 12                    # implement issue #12 now (or: python -m autoforge run 12)
     autoforge resume <run_id>           # approve a run paused for approval -> opens the PR
     autoforge resume <run_id> --reject  # reject it -> no PR
+    autoforge eval context | validate | run | compare   # evaluation suite (see app/eval_cli.py)
 
 ``run`` goes through the same job store and ``process_job`` as the service, so
 a run started here can later be approved with an ``/autoforge approve``
@@ -30,6 +31,7 @@ import uuid
 from pydantic import ValidationError
 
 from autoforge.app.config import Settings
+from autoforge.app.eval_cli import add_eval_parser, run_eval
 from autoforge.app.wiring import build_dependencies, build_job_store, workflow_config
 from autoforge.domain.models import Trigger, TriggerKind
 from autoforge.observability import configure_logging
@@ -57,7 +59,11 @@ def main(argv: list[str] | None = None) -> int:
     resume = sub.add_parser("resume", help="Approve (default) or reject a run waiting for approval")
     resume.add_argument("run_id", help="Run ID printed when the run paused")
     resume.add_argument("--reject", action="store_true", help="Reject the change instead of opening the PR")
+    add_eval_parser(sub)
     args = parser.parse_args(argv)
+
+    if args.command == "eval":  # needs no GitHub settings; loads its own
+        return run_eval(args)
 
     try:
         settings = Settings()

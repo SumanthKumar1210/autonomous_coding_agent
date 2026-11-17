@@ -1,0 +1,2 @@
+# Eval fixtures are compared, hashed and built byte for byte; keep them LF on every OS.
+evals/** text eol=lf

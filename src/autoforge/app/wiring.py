@@ -5,8 +5,9 @@ Everything else depends on interfaces (``ports``). This module decides that
 "reviewer" mean the OpenAI agents, and "checkpointer" means a local SQLite
 file, and connects them using the settings.
 
-To switch to Jira later, only this file changes. Every entry point (CLI now,
-webhook service later) uses ``build_dependencies``.
+To switch to Jira later, only this file changes. Every entry point (CLI and
+webhook service) uses ``build_dependencies``; the eval harness uses
+``build_eval_agents``, the same agents and sandbox without GitHub.
 """
 
 from __future__ import annotations
@@ -21,7 +22,8 @@ from openai import OpenAI
 
 from autoforge.agents.coder import OpenAICoder
 from autoforge.agents.reviewer import OpenAIReviewer
-from autoforge.app.config import Settings
+from autoforge.app.config import AgentSettings, RunSettings, Settings
+from autoforge.evals.runner import EvalAgents, EvalBudget
 from autoforge.integrations.github.client import GitHubClient
 from autoforge.integrations.github.issues import GitHubIssuesSource
 from autoforge.integrations.github.repo import GitHubRepoHost
@@ -91,10 +93,8 @@ def build_dependencies(settings: Settings) -> Iterator[Dependencies]:
         yield Dependencies(
             tickets=GitHubIssuesSource(github, label_prefix=settings.trigger_label),
             repo=GitHubRepoHost(github, branch_prefix=settings.branch_prefix),
-            coder=OpenAICoder(openai_client, settings.openai_model,
-                              max_output_tokens=settings.openai_max_output_tokens),
-            reviewer=OpenAIReviewer(openai_client, settings.reviewer_model,
-                                    max_output_tokens=settings.openai_max_output_tokens),
+            coder=_coder(openai_client, settings),
+            reviewer=_reviewer(openai_client, settings),
             checkpointer=SqliteSaver(conn, serde=checkpoint_serializer()),
             verifier=verifier,
         )
@@ -104,3 +104,45 @@ def build_dependencies(settings: Settings) -> Iterator[Dependencies]:
         github.close()
         openai_client.close()
         conn.close()
+
+
+def eval_budget(settings: RunSettings) -> EvalBudget:
+    """Extract the run limits for evaluation runs (same settings as production)."""
+    return EvalBudget(max_context_bytes=settings.max_context_bytes, max_file_bytes=settings.max_file_bytes,
+                      max_attempts=settings.max_attempts)
+
+
+@contextmanager
+def build_verifier(settings: RunSettings) -> Iterator[SandboxVerifier | None]:
+    """The sandbox verifier when ``SANDBOX_URL`` is set (else ``None``), closed afterwards."""
+    verifier = (SandboxVerifier(settings.sandbox_url, timeout=settings.sandbox_timeout_seconds)
+                if settings.sandbox_url else None)
+    try:
+        yield verifier
+    finally:
+        if verifier is not None:
+            verifier.close()
+
+
+@contextmanager
+def build_eval_agents(settings: AgentSettings) -> Iterator[EvalAgents]:
+    """The production OpenAI coder and reviewer plus the sandbox, for ``autoforge eval run``.
+
+    No GitHub client is created: eval runs read fixture repositories and never publish.
+    """
+    openai_client = OpenAI(api_key=settings.openai_api_key.get_secret_value(),
+                           timeout=settings.openai_timeout_seconds)
+    try:
+        with build_verifier(settings) as verifier:
+            yield EvalAgents(coder=_coder(openai_client, settings), reviewer=_reviewer(openai_client, settings),
+                             verifier=verifier)
+    finally:
+        openai_client.close()
+
+
+def _coder(client: OpenAI, settings: AgentSettings) -> OpenAICoder:
+    return OpenAICoder(client, settings.openai_model, max_output_tokens=settings.openai_max_output_tokens)
+
+
+def _reviewer(client: OpenAI, settings: AgentSettings) -> OpenAIReviewer:
+    return OpenAIReviewer(client, settings.reviewer_model, max_output_tokens=settings.openai_max_output_tokens)

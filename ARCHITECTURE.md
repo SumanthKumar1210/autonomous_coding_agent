@@ -44,9 +44,8 @@ Phases 2–4.
 
 Every block in the Phase 1 system appears here. Solid arrows are runtime calls
 or data flow. Dashed arrows are planned flows. Dotted arrows with hollow heads
-mean "implements this port". Colour shows status: green is built (1.1–1.4b), yellow is
-next (1.4c: evals), grey is planned later,
-blue is external, purple is the human actor. `webhook.py` queues triggers;
+mean "implements this port". Colour shows status: green is built (1.1–1.4c), grey is
+planned later, blue is external, purple is the human actor. `webhook.py` queues triggers;
 `worker.py` turns each one into a run; `graph.py` is the LangGraph
 orchestrator; `pipeline.py` starts or resumes it and reports every outcome on
 the ticket.
@@ -62,11 +61,12 @@ the ticket.
 | **Jira Cloud API** | external | Alternative ticket source once access exists | — |
 | **Sandbox container** | delivery | Separate container (`autoforge.sandbox`, stdlib only) with gcc, CMake, pytest and ruff. Internal network only (no internet), read-only root, dropped capabilities, memory/CPU/PID limits. Runs each job as an unprivileged user in a fresh tmpfs workspace and kills everything the job started afterwards | ✅ |
 | `app/cli.py` | app | `serve` (webhook service), `run <issue>` and `resume <run_id> [--reject]`. Prints a JSON result, exit code 0/1/2 | ✅ |
+| `app/eval_cli.py` | app | `eval context \| validate \| run \| compare`: runs the eval suite, writes JSON + Markdown reports | ✅ |
 | `app/webhook.py` | app | FastAPI service: `POST /webhook` verifies the HMAC signature, parses and dedupes the event, queues a job and replies `202` in milliseconds; `GET /healthz`. Lifespan runs the worker | ✅ |
 | Dockerfile · compose | delivery | Non-root, read-only container; state on the `/data` volume; health check | ✅ |
 | CI (GitHub Actions) | delivery | ruff, mypy --strict, pytest on Python 3.11 / 3.12, Docker build smoke test | ✅ |
-| `app/config.py` | app | Typed settings from env / `.env`. Secrets held as `SecretStr` | ✅ |
-| `app/wiring.py` | app | Composition root. The only place concrete adapters (GitHub, OpenAI agents, SQLite checkpointer and job store) are created and injected | ✅ |
+| `app/config.py` | app | Typed settings from env / `.env`, in three nested classes so each command needs only its own secrets: `RunSettings` (budgets, sandbox) ⊂ `AgentSettings` (+ OpenAI) ⊂ `Settings` (+ GitHub, service). Secrets held as `SecretStr` | ✅ |
+| `app/wiring.py` | app | Composition root. The only place concrete adapters (GitHub, OpenAI agents, SQLite checkpointer and job store, sandbox verifier) are created and injected; `build_eval_agents` gives the eval harness the same agents and sandbox without GitHub | ✅ |
 | `workflow/worker.py` | workflow | `process_job` + background `Worker` thread: authorizes the actor (write access), runs RUN jobs (skipped while a run awaits approval), resumes the paused run for APPROVE / REJECT, records every result | ✅ |
 | `workflow/pipeline.py` | workflow | `run_ticket` / `resume_run`: idempotency check, load ticket, run or resume the graph, report every outcome (PR, awaiting approval, rejected, failed) on the ticket | ✅ |
 | `workflow/graph.py` | workflow | LangGraph state machine: prepare → code → validate → verify → review → (approve) → publish, with the bounded feedback loop to the coder (policy, checks, review) and the HITL interrupt | ✅ |
@@ -96,7 +96,8 @@ the ticket.
 | `sandbox/verifier.py` | integrations | `SandboxVerifier`: sends the base archive, changed files and checks to the sandbox over HTTP; retries only failed connections, so a job is never sent twice | ✅ |
 | `sandbox/` (package) | sandbox | Runs inside the sandbox container: `protocol` (wire format), `runner` (unpack, apply, run checks with timeouts and output tails, re-run failures on the base), `server` (HTTP, one job at a time as the job user, cleanup) | ✅ |
 | `observability.py` | cross-cutting | JSON-lines logs. A `run_id` ties together the logs, PR footer and issue comment. Token usage recorded per run | ✅ |
-| `evals/` | cross-cutting | Fixed sample-ticket suite that scores output quality across prompt or model changes | 🟨 1.4c |
+| `evals/` (package) | evals | Runs the **real agent graph** on a fixed sample-ticket suite and grades the result: context recall; policy, scope and patterns; the repo's checks plus hidden acceptance tests in the sandbox (*resolved*). Variants `single` / `no-review` / `full` measure check feedback and reviewer lift. `suite` (load + validate cases), `local_repo` (`LocalRepoHost`: in-memory `RepoHost` on a fixture, publish only records), `grading`, `runner`, `report` (JSON records, Markdown, compare) | ✅ |
+| `evals/` (suite data, repo root) | data | Frozen fixture repos (`bms_c` C firmware, `bms_py` Python tools) and cases (ticket, expectations, hidden tests, reference solution). Shipped in the image; `evals/README.md` | ✅ |
 
 ## 3. Layers and the dependency rule
 
@@ -109,7 +110,11 @@ flowchart TB
     ports["ports.py<br/>TicketSource · RepoHost · Coder · Reviewer · Verifier · JobStore"]
     domain["domain/<br/>models · policy · checks · errors"]
     sandbox["sandbox/ (own container)<br/>protocol · runner · server — stdlib only"]
+    evals["evals/<br/>suite · local_repo · grading · runner · report"]
 
+    app --> evals
+    evals --> workflow
+    evals --> ports
     app --> workflow
     app --> integrations
     app --> agents
@@ -125,7 +130,7 @@ flowchart TB
 ```
 
 Dependencies only point downward, and `domain/` imports nothing else in the
-package. "Web" means `fastapi` / `starlette` / `uvicorn` (allowed only in
+package, and no production layer imports `evals/` (only `app/` does). "Web" means `fastapi` / `starlette` / `uvicorn` (allowed only in
 `app/`); "storage" means `sqlite3` and the LangGraph SQLite saver (allowed in
 `integrations/` and `app/`). `tests/test_architecture.py` enforces these rules,
 so a violating import fails CI.
@@ -137,7 +142,8 @@ so a violating import fails CI.
 | `agents/` | LLM roles: prompts, context building, and calls to the OpenAI model | `domain`, `ports`, `openai` | workflow, integrations, app, `langgraph`, web, storage |
 | `workflow/` | Processes queued jobs, orchestrates one ticket run as a LangGraph graph, owns run IDs, checkpoints and idempotency, reports outcomes | `domain`, `ports`, `agents.context`, `langgraph` | integrations, app, `agents.coder` / `reviewer` / `llm`, `openai`, `httpx`, web, storage |
 | `integrations/` | Adapters to external systems that implement the ports | `domain`, `ports`, `httpx`, `sqlite3` | workflow, app, agents, `openai`, `langgraph`, web |
-| `app/` | Composition root: settings, wiring, entry points (CLI, FastAPI service) | everything | — |
+| `evals/` | Eval harness: runs the real graph on fixture repos and grades the changes | `domain`, `ports`, `workflow`, `agents.context` / `prompts` / `languages`, `langgraph` | integrations, app, `agents.coder` / `reviewer` / `llm`, `openai`, `httpx`, web, storage |
+| `app/` | Composition root: settings, wiring, entry points (CLI, FastAPI service, eval CLI) | everything | — |
 | `sandbox/` | Runs in the sandbox container: executes repository checks | stdlib only | every other layer, every third-party package |
 | `observability.py` | JSON logging and the run-ID context, used by every layer | stdlib | — |
 
@@ -185,16 +191,24 @@ src/autoforge/
 │   ├── protocol.py        request / response format
 │   ├── runner.py          one job: unpack, apply change, run checks, re-run failures on the base
 │   └── server.py          HTTP server: one job at a time as the job user, then kill + wipe
+├── evals/                 eval harness (suite data lives in evals/ at the repo root)
+│   ├── suite.py           EvalCase, load_suite: case.toml + hidden/ + solution/, validated
+│   ├── local_repo.py      LocalRepoHost: RepoHost on a fixture folder, in memory, publish only records
+│   ├── grading.py         score_context, grade_change (policy, scope, repo + hidden checks → resolved)
+│   ├── runner.py          Variant (single / no-review / full), run_case, context_case, validate_case
+│   └── report.py          RunRecord, aggregate, markdown_summary, compare, prompt_fingerprint
 ├── app/
-│   ├── config.py          Settings (pydantic-settings, env / .env)
-│   ├── wiring.py          build_dependencies / build_job_store: the only place concrete classes meet
+│   ├── config.py          RunSettings ⊂ AgentSettings ⊂ Settings (pydantic-settings, env / .env)
+│   ├── wiring.py          build_dependencies / build_job_store / build_eval_agents: the only place concrete classes meet
 │   ├── webhook.py         FastAPI app: POST /webhook, GET /healthz, worker lifespan
-│   └── cli.py             `autoforge serve | run <issue> | resume <run_id> [--reject]`
+│   ├── cli.py             `autoforge serve | run <issue> | resume <run_id> [--reject] | eval ...`
+│   └── eval_cli.py        `autoforge eval context | validate | run | compare`
 └── observability.py       JSON logs + run_id context
 ```
 
 Repository root: `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`,
-and `docs/DEPLOYMENT.md` (webhook setup and operations).
+`docs/DEPLOYMENT.md` (webhook setup and operations) and `evals/` (eval suite:
+fixture repos and cases, see `evals/README.md`).
 
 ## 5. Runtime flow
 
@@ -308,6 +322,7 @@ sequenceDiagram
 | **Checkpoints** | LangGraph saves the run state after every node (SQLite, `CHECKPOINT_DB`, default `.autoforge/checkpoints.sqlite`, git-ignored because it holds ticket and repo content). The serializer restores only the allow-listed domain types in `workflow.graph.CHECKPOINT_TYPES`. A paused run resumes in a new process with the exact change that was reviewed, not a regenerated one. |
 | **Observability** | JSON logs on stderr. A `run_id` ties together the logs, the checkpoint thread, the PR footer and the issue comment. Each LLM call logs its tokens; the run's total (coder + reviewer, all attempts) is logged and shown in the PR footer. |
 | **Secrets** | `SecretStr` settings, loaded from env or `.env`, never logged. HTTP client logging is turned down so request URLs and headers don't appear in logs. |
+| **Evaluation** | `autoforge eval` runs the production graph on frozen fixture repos (never GitHub) and grades the final change with deterministic graders only: hidden acceptance tests and the repo's own checks in the sandbox decide *resolved*; scope and pattern graders explain failures. Each case is validated (hidden tests fail on the fixture, pass with the reference solution). Variants measure check-feedback and reviewer lift; reports record models and a prompt fingerprint, and `compare` diffs two reports. Context recall on the suite is a CI test. |
 | **Testability** | `FakeGitHub` (an in-memory REST fake on `httpx.MockTransport`) and the scripted `FakeCoder` / `FakeReviewer` let the real graph, pipeline, worker and adapters run in tests with no network, including pause/resume across a real SQLite checkpoint. The HTTP service is tested through FastAPI's test client. CI runs ruff, mypy --strict and pytest. An opt-in, read-only integration test hits the real repo. |
 
 ## 7. Where Phase 1 increments plug in
@@ -318,7 +333,7 @@ sequenceDiagram
 | 3. Webhook service ✅ | `app/webhook.py` (FastAPI) verifies and queues; `workflow/worker.py` authorizes and runs; `SqliteJobStore` behind the `JobStore` port; approval by issue comment; Dockerfile, compose and CI. | `app/`, `workflow/`, `integrations/`, repo root |
 | 4a. Context + C ✅ | Ticket-driven `plan_context` (scoring, structural expansion, excerpts, reasons in logs and PR). `agents/languages.py` with C and Python rules for both agents. `RepoHost.read_files` with an in-memory tarball for large repos. | `agents/`, `ports.py`, `integrations/github/` |
 | 4b. Verification ✅ | `Verifier` port and `verify` node: the repo's checks (`domain/checks.py`) run in the separate `sandbox` container before review; checks the change broke go back to the coder, pre-existing failures are flagged but not blamed; results in the PR. | `domain/`, `ports.py`, `sandbox/`, `integrations/sandbox/`, `workflow/graph.py`, compose |
-| 4c. Evals | `evals/` holds a sample-ticket suite measuring context recall and change quality (e.g. single agent vs coder + reviewer). | `evals/` |
+| 4c. Evals ✅ | `evals/` package runs the real graph on a fixture suite (C and Python) via `LocalRepoHost`, grades context recall and change quality (hidden acceptance tests + repo checks in the sandbox), compares variants (`single` / `no-review` / `full` → reviewer lift) and reports. Settings split so evals need no GitHub credentials. | `evals/`, `app/eval_cli.py`, `app/config.py`, `app/wiring.py`, repo-root `evals/` |
 | Later: Jira | `integrations/jira/` implementing `TicketSource`. | `integrations/` |
 
 Steps 2–4 of the product roadmap (test generation, MISRA, Polarion, HIL/SIL) are

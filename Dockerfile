@@ -36,6 +36,8 @@ RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin auto
  && chown autoforge /data
 COPY --from=build /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
+# The eval suite (fixtures + cases) for `autoforge eval`, versioned with the code it measures.
+COPY evals /app/evals
 USER autoforge
 WORKDIR /app
 VOLUME ["/data"]

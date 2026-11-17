@@ -1,0 +1,39 @@
+repo = "bms_c"
+title = "Add pyro fuse driver"
+body = """
+The pack has a pyrotechnic fuse that permanently disconnects it in a crash. Add a driver module for it.
+
+## Acceptance criteria
+
+- New module `pyro_fuse` (`include/pyro_fuse.h`, `src/pyro_fuse.c`) with:
+  - `void pyro_fuse_init(void)`: fuse armed, not fired.
+  - `bms_status_t pyro_fuse_fire(void)`: fires the fuse through the new HAL function
+    `bms_status_t hal_fire_pyro_fuse(void)` and returns `BMS_OK`. The fuse fires at most once: any
+    later call returns `BMS_ERR_STATE` without calling the HAL again.
+  - If `hal_fire_pyro_fuse()` fails, `pyro_fuse_fire()` returns `BMS_ERR_HW` and the fuse still
+    counts as fired (a half-fired squib must never be fired again), so later calls return
+    `BMS_ERR_STATE`.
+  - `bool pyro_fuse_is_fired(void)`.
+- `hal.h` declares `hal_fire_pyro_fuse()`. The HAL stub implements it, and `tests/hal_stub.h` gets
+  `uint32_t hal_stub_pyro_fire_count(void)` (calls since the last reset) and
+  `void hal_stub_fail_pyro(bool fail)`; `hal_stub_reset()` resets both.
+- Built and unit-tested like every other module (`CMakeLists.txt`, `tests/test_pyro_fuse.c`).
+"""
+
+[expect]
+context = ["include/hal.h", "tests/hal_stub.h", "tests/hal_stub.c", "CMakeLists.txt"]
+changed = [
+    "include/pyro_fuse.h", "src/pyro_fuse.c", "include/hal.h", "tests/hal_stub.h", "tests/hal_stub.c",
+    "CMakeLists.txt", "tests/test_pyro_fuse.c",
+]
+unchanged = ["src/cell_monitor.c", "src/soc.c", "include/fault.h"]
+contains = [
+    { path = "include/hal.h", pattern = 'bms_status_t\s+hal_fire_pyro_fuse\s*\(\s*void\s*\)' },
+    { path = "CMakeLists.txt", pattern = 'BMS_MODULES[^)]*pyro_fuse' },
+    { path = "CMakeLists.txt", pattern = 'src/pyro_fuse\.c' },
+]
+
+[[hidden_checks]]
+name = "acceptance"
+run = 'gcc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude -Itests src/*.c tests/hal_stub.c .autoforge-eval/acceptance.c -o "$TMPDIR/acceptance" && "$TMPDIR/acceptance"'
+timeout = 300

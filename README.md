@@ -42,7 +42,7 @@ turns a ticket into a reviewed pull request.
 | 3. Service & delivery | **FastAPI** webhook service (HMAC-verified, write-access check), durable SQLite job queue + background worker, idempotent runs (redelivery and re-label dedupe), `/autoforge approve` comments, Docker image + compose, GitHub Actions CI (ruff, mypy --strict, pytest, Docker build) | ✅ Built, 115 automated tests |
 | 4a. Context + C | **Ticket-driven repo-context retrieval** (identifiers, file names and keywords from the issue → defining files, header/source pairs, includes/imports, tests, callers, build files; excerpts for large files; reasons listed in the PR), **C support** with language-specific rules for coder and reviewer | ✅ Built, 143 automated tests |
 | 4b. Verification | **Sandboxed pre-PR checks**: the repo's CMake build + CTest, pytest and ruff (or `.autoforge.toml`) run on the change in a separate, offline, unprivileged sandbox container; checks the change broke go back to the coder with their output, pre-existing failures are flagged, results are listed in the PR | ✅ Built, 182 automated tests |
-| 4c. Evals | Evaluation harness measuring context recall and reviewer lift | ⚪ Next |
+| 4c. Evals | **Evaluation harness**: a frozen suite of C and Python sample tickets runs through the real agent graph (no GitHub). Changes are graded deterministically (hidden acceptance tests + the repo's own checks in the sandbox, scope and pattern checks, context recall), variants measure check-feedback and **reviewer lift**, reports compare prompt/model changes; every case is validated against a reference solution | ✅ Built, 230 automated tests |
 | Later | Jira as a second ticket source (pluggable `TicketSource` port) | ⚪ Planned |
 
 ## Architecture
@@ -76,6 +76,7 @@ flowchart LR
         POLICY["Policy and safety layer<br/>path rules · PR-only · injection guard"]
         VERIFY["Verification sandbox<br/>build · tests · lint"]
         OBS["Observability<br/>run IDs · JSON logs · token cost"]
+        EVALS["Eval harness<br/>sample tickets · reviewer lift"]
     end
 
     %% ---------- External ----------
@@ -105,16 +106,17 @@ flowchart LR
     PR --> HUMAN
     PR -->|status + PR link| GHI
     ORCH --- OBS
+    EVALS -.->|measures| ORCH
 
     classDef built fill:#d4f7dc,stroke:#1a7f37,color:#0b3d1a
     classDef next fill:#fff4cc,stroke:#bf8700,color:#4d3800
     classDef planned fill:#f0f0f0,stroke:#8c959f,color:#57606a,stroke-dasharray:4 3
-    class GHI,ENTRY,ORCH,CTX,CODER,REVIEW,POLICY,VERIFY,OBS,PR,HUMAN,LLM built
+    class GHI,ENTRY,ORCH,CTX,CODER,REVIEW,POLICY,VERIFY,OBS,EVALS,PR,HUMAN,LLM built
     class JIRA,POL,TESTGEN,REQ,HIL,BENCH planned
 ```
 
-<sub>🟩 built (Phase 1.1–1.4b) · ⬜ planned (Phase 1.4c and Phases 2–4) · solid
-arrows = working today, dashed = planned.</sub>
+<sub>🟩 built (Phase 1.1–1.4c) · ⬜ planned (Phases 2–4) · solid
+arrows = working today, dashed = planned (or, for the eval harness, offline measurement).</sub>
 
 Layers, ports and the per-run sequence diagram are in
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -145,7 +147,7 @@ Python 3.11 · OpenAI Responses API (structured outputs) · LangGraph (SQLite ch
 · FastAPI / uvicorn · GitHub REST API and webhooks · pydantic / pydantic-settings · httpx
 · SQLite · pytest · ruff · mypy (strict) · Docker · GitHub Actions
 
-## How it works today (Phase 1, increments 1–4b)
+## How it works today (Phase 1, increments 1–4c)
 
 A maintainer adds the `autoforge` label to an issue. GitHub sends a webhook to
 the AutoForge service, which verifies its HMAC signature, drops duplicates,
@@ -223,6 +225,19 @@ autoforge resume <run_id>           # approve a run paused for approval (REQUIRE
 autoforge resume <run_id> --reject  # reject it; no PR is opened
 ```
 
+**Evaluation** (when prompts, models or context retrieval change; see
+[evals/README.md](evals/README.md)):
+
+```bash
+autoforge eval context --verbose    # context recall on the suite (free, also in CI)
+autoforge eval validate             # every case sound: hidden tests fail on the fixture, pass with the solution
+autoforge eval run --repeat 3       # agents on every case in variants single / no-review / full (spends tokens)
+autoforge eval compare old.json new.json
+```
+
+`validate` and `run` need the sandbox, so run them in the service container:
+`docker compose run --rm --no-deps autoforge autoforge eval run ...`.
+
 `run` and `resume` print a JSON result line (`run_id`, `outcome`, `pr_url`, `error`)
 on stdout and writes structured logs to stderr. Outcomes: `pr_opened`,
 `already_open`, `awaiting_approval`, `rejected`, `skipped`, `failed`. Exit codes: 1 means
@@ -239,5 +254,7 @@ The tests run against an in-memory fake GitHub API and scripted fake coder and
 reviewer agents. They make no network calls. They cover the webhook service
 (signatures, dedupe), the job queue and worker (authorization, approvals), and
 pause/resume across real SQLite files. They also enforce the architecture's layer
-rules and the PR-only safety guarantees. GitHub Actions runs lint, strict type
+rules and the PR-only safety guarantees, and the eval suite itself: every
+case must be statically sound and context retrieval must find every file the
+cases expect. GitHub Actions runs lint, strict type
 checks and the tests on Python 3.11 and 3.12, then builds the Docker image.

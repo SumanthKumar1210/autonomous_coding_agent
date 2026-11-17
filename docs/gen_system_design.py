@@ -179,11 +179,11 @@ add('<text x="1146" y="1068" class="lbl" text-anchor="end">← github/repo.py en
 # ---------------- cross-cutting ----------------
 band(40, 1180, 1120, 92, "cross-cutting")
 block(60, 1206, 530, 54, "observability.py", ["JSON logs · run_id context · token usage — used by all layers"])
-block(610, 1206, 530, 54, "evals/", ["sample tickets · quality scoring of agents"], "next")
+block(610, 1206, 530, 54, "evals/", ["fixture tickets · real graph, local repo · reviewer lift"])
 
 # ---------------- legend ----------------
 ly = 1300
-items = [("built", "Built (Phase 1.1–1.4b)"), ("next", "Next (1.4c evals)"),
+items = [("built", "Built (Phase 1.1–1.4c)"),
          ("planned", "Planned (later)"), ("ext", "External system"), ("actor", "Actor")]
 x = 40
 for kind, text in items:
