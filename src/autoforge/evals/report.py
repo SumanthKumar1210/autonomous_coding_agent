@@ -119,10 +119,11 @@ class Aggregate:
 
 
 def report_meta(*, coder_model: str, reviewer_model: str, budget: dict[str, int], suite: str,
-                started_at: str) -> dict[str, Any]:
-    """The report header: what was measured, with which models and prompts."""
+                started_at: str, aborted: str = "") -> dict[str, Any]:
+    """The report header: what was measured, with which models and prompts, and why it stopped early (if it did)."""
     return {"schema": SCHEMA_VERSION, "started_at": started_at, "suite": suite, "coder_model": coder_model,
-            "reviewer_model": reviewer_model, "prompt_fingerprint": prompt_fingerprint(), "budget": budget}
+            "reviewer_model": reviewer_model, "prompt_fingerprint": prompt_fingerprint(), "budget": budget,
+            "aborted": aborted}
 
 
 def prompt_fingerprint() -> str:
@@ -193,6 +194,7 @@ def markdown_summary(meta: dict[str, Any], records: list[RunRecord]) -> str:
         f"Coder `{meta.get('coder_model', '?')}` · reviewer `{meta.get('reviewer_model', '?')}` · "
         f"prompts `{meta.get('prompt_fingerprint', '?')}` · {meta.get('started_at', '')}",
         "",
+        *(["> [!WARNING]", f"> Incomplete run: {meta['aborted']}", ""] if meta.get("aborted") else []),
         "| Variant | Runs | Resolved | Scope ok | Hidden checks | Context recall | Attempts | Tokens in/out | "
         "Time | False accepts | False rejects | Unverified |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
@@ -234,7 +236,7 @@ def compare(old: tuple[dict[str, Any], list[RunRecord]], new: tuple[dict[str, An
         "| | Old | New |",
         "|---|---|---|",
     ]
-    for key in ("started_at", "coder_model", "reviewer_model", "prompt_fingerprint"):
+    for key in ("started_at", "coder_model", "reviewer_model", "prompt_fingerprint", "aborted"):
         lines.append(f"| {key} | {old_meta.get(key, '?')} | {new_meta.get(key, '?')} |")
     lines += ["", "| Variant | Runs | Resolved | Scope ok | Hidden checks | Context recall | Tokens/run |",
               "|---|---|---|---|---|---|---|"]

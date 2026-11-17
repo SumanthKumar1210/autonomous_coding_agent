@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from langchain_core.runnables import RunnableConfig
@@ -216,6 +217,55 @@ def run_case(case: EvalCase, variant: Variant, agents: EvalAgents, budget: EvalB
                                            "input_tokens": result.usage.input_tokens,
                                            "output_tokens": result.usage.output_tokens})
     return result
+
+
+MAX_CONSECUTIVE_INFRA_FAILURES = 3
+"""``run_suite`` stops after this many runs in a row fail for infrastructure reasons."""
+
+
+def infra_failure(run: CaseRun) -> str:
+    """Why ``run`` failed for an infrastructure reason (empty if it did not).
+
+    Infrastructure failures say nothing about the agents: the run crashed
+    (outcome ``error``, e.g. OpenAI unreachable) or the sandbox could not grade
+    the change. Agent failures (policy, checks, review, refusals) are results.
+    """
+    if run.outcome == "error":
+        return run.error
+    if run.change is not None and run.change.checks_skipped.startswith("sandbox error"):
+        return run.change.checks_skipped
+    return ""
+
+
+def run_suite(cases: list[EvalCase], variants: list[Variant], agents: EvalAgents, budget: EvalBudget, *,
+              repeat: int = 1, on_run: Callable[[CaseRun], None] | None = None,
+              max_infra_failures: int = MAX_CONSECUTIVE_INFRA_FAILURES) -> tuple[list[CaseRun], str]:
+    """Run every case in every variant ``repeat`` times, stopping early if the infrastructure is down.
+
+    Args:
+        on_run: Called after each run (progress output).
+        max_infra_failures: Stop after this many consecutive ``infra_failure`` runs: when OpenAI or the
+            sandbox is unreachable, every further run would fail the same way and only waste time.
+
+    Returns:
+        The runs made, and why the suite was aborted (empty if it completed).
+    """
+    runs: list[CaseRun] = []
+    streak = 0
+    for case in cases:
+        for variant in variants:
+            for i in range(1, repeat + 1):
+                run = run_case(case, variant, agents, budget, repeat=i)
+                runs.append(run)
+                if on_run is not None:
+                    on_run(run)
+                reason = infra_failure(run)
+                streak = streak + 1 if reason else 0
+                if streak >= max_infra_failures:
+                    aborted = f"aborted after {streak} consecutive infrastructure failures; last: {reason[:500]}"
+                    log.error("eval suite aborted", extra={"runs": len(runs), "reason": aborted})
+                    return runs, aborted
+    return runs, ""
 
 
 def validate_case(case: EvalCase, verifier: Verifier | None) -> list[str]:

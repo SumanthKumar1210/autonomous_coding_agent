@@ -15,8 +15,9 @@ Usage::
   **Spends OpenAI tokens.** Needs ``OPENAI_*`` and ``SANDBOX_URL``; never GitHub.
 - ``compare``: compares two ``run`` reports (e.g. before and after a prompt change).
 
-Exit codes: 0 success; 1 a context case below ``--min-recall`` or an unsound
-case; 2 configuration or suite error.
+Exit codes: 0 success; 1 a context case below ``--min-recall``, an unsound
+case, or a ``run`` aborted because OpenAI or the sandbox kept failing (the
+partial report is still written); 2 configuration or suite error.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ from autoforge.evals.report import (
     report_meta,
     write_report,
 )
-from autoforge.evals.runner import VARIANTS, context_case, run_case, validate_case
+from autoforge.evals.runner import VARIANTS, CaseRun, context_case, run_suite, validate_case
 from autoforge.evals.suite import EvalCase, SuiteError, load_suite
 from autoforge.observability import configure_logging
 
@@ -156,16 +157,15 @@ def _run(cases: list[EvalCase], settings: AgentSettings, args: argparse.Namespac
     variants = [VARIANTS[v] for v in (args.variant or list(VARIANTS))]
     budget = eval_budget(settings)
     started = datetime.now(UTC)
-    records: list[RunRecord] = []
+
+    def progress(run: CaseRun) -> None:
+        print(f"{run.case_id} / {run.variant} #{run.repeat}: {'resolved' if run.resolved else run.outcome}",
+              file=sys.stderr)
+
     with build_eval_agents(settings) as agents:
-        for case in cases:
-            for variant in variants:
-                for i in range(1, args.repeat + 1):
-                    run = run_case(case, variant, agents, budget, repeat=i)
-                    records.append(RunRecord.from_run(run))
-                    print(f"{case.id} / {variant.name} #{i}: {'resolved' if run.resolved else run.outcome}",
-                          file=sys.stderr)
-    meta = report_meta(coder_model=settings.openai_model, reviewer_model=settings.reviewer_model,
+        runs, aborted = run_suite(cases, variants, agents, budget, repeat=args.repeat, on_run=progress)
+    records = [RunRecord.from_run(r) for r in runs]
+    meta = report_meta(aborted=aborted, coder_model=settings.openai_model, reviewer_model=settings.reviewer_model,
                        budget={"max_context_bytes": budget.max_context_bytes,
                                "max_file_bytes": budget.max_file_bytes, "max_attempts": budget.max_attempts},
                        suite=str(args.suite), started_at=started.isoformat(timespec="seconds"))
@@ -175,4 +175,7 @@ def _run(cases: list[EvalCase], settings: AgentSettings, args: argparse.Namespac
     stem.with_suffix(".md").write_text(summary, encoding="utf-8")
     print(summary, end="")
     print(f"\nReport: {stem.with_suffix('.json')}", file=sys.stderr)
+    if aborted:
+        print(f"Eval {aborted}", file=sys.stderr)
+        return 1
     return 0

@@ -28,7 +28,17 @@ from autoforge.evals.report import (
     report_meta,
     write_report,
 )
-from autoforge.evals.runner import VARIANTS, EvalAgents, EvalBudget, context_case, run_case, validate_case
+from autoforge.evals.runner import (
+    MAX_CONSECUTIVE_INFRA_FAILURES,
+    VARIANTS,
+    EvalAgents,
+    EvalBudget,
+    context_case,
+    infra_failure,
+    run_case,
+    run_suite,
+    validate_case,
+)
 from autoforge.evals.suite import HIDDEN_CHECK_PREFIX, EvalCase, SuiteError, load_suite
 from autoforge.sandbox.runner import unpack
 from tests.fake_agents import FakeCoder, FakeReviewer, reject
@@ -260,6 +270,59 @@ def test_without_sandbox_nothing_counts_as_resolved() -> None:
     assert run.outcome == "completed" and not run.resolved
     assert run.change is not None and "no verification sandbox" in run.change.checks_skipped
     assert aggregate([RunRecord.from_run(run)])["full"].unverified == 1
+
+
+def test_run_suite_stops_when_the_infrastructure_is_down() -> None:
+    cases = load_suite(SUITE)
+    coder = FakeCoder(error=ConnectionError("Connection error."))  # what an unreachable OpenAI looks like
+    seen: list[str] = []
+    runs, aborted = run_suite(cases, list(VARIANTS.values()), EvalAgents(coder, FakeReviewer(), RecordingVerifier()),
+                              BUDGET, on_run=lambda r: seen.append(r.outcome))
+    assert len(runs) == MAX_CONSECUTIVE_INFRA_FAILURES and seen == ["error"] * 3
+    assert aborted.startswith("aborted after 3 consecutive infrastructure failures") and "Connection error" in aborted
+
+
+def test_run_suite_counts_sandbox_errors_and_resets_on_success() -> None:
+    from autoforge.domain.errors import VerificationError
+
+    case = _case()
+
+    class FlakySandbox(RecordingVerifier):
+        def __init__(self, failures: int) -> None:
+            super().__init__()
+            self.failures = failures
+
+        def verify(self, archive: bytes, change: CodeChange, checks: list[CheckSpec]) -> VerificationReport:
+            if self.failures:
+                self.failures -= 1
+                raise VerificationError("sandbox unreachable")
+            return super().verify(archive, change, checks)
+
+    single = [VARIANTS["single"]]  # one sandbox call per run (grading)
+    agents = EvalAgents(_solution_coder(case), FakeReviewer(), FlakySandbox(failures=2))
+    runs, aborted = run_suite([case], single, agents, BUDGET, repeat=4)
+    assert aborted == "" and [r.resolved for r in runs] == [False, False, True, True]
+    assert infra_failure(runs[0]).startswith("sandbox error") and infra_failure(runs[2]) == ""
+
+    agents = EvalAgents(_solution_coder(case), FakeReviewer(), FlakySandbox(failures=9))
+    runs, aborted = run_suite([case], single, agents, BUDGET, repeat=5, max_infra_failures=2)
+    assert len(runs) == 2 and "sandbox unreachable" in aborted
+
+
+def test_agent_failures_never_abort_the_suite() -> None:
+    from autoforge.domain.errors import AgentError
+
+    case = _case()
+    agents = EvalAgents(FakeCoder(error=AgentError("refused")), FakeReviewer(), RecordingVerifier())
+    runs, aborted = run_suite([case], [VARIANTS["single"]], agents, BUDGET, repeat=4)
+    assert aborted == "" and [r.outcome for r in runs] == ["agent_error"] * 4
+
+
+def test_aborted_report_is_marked() -> None:
+    meta = report_meta(coder_model="m", reviewer_model="m", budget={}, suite="evals", started_at="t",
+                       aborted="aborted after 3 consecutive infrastructure failures; last: x")
+    text = markdown_summary(meta, [_record("full", False, outcome="error")])
+    assert "> [!WARNING]\n> Incomplete run: aborted after 3" in text
 
 
 def test_validate_case_with_sandbox_checks_both_directions() -> None:

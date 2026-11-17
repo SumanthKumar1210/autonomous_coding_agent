@@ -75,6 +75,11 @@ change is still built and tested.
 varies between runs, so use `--repeat 3` or more before trusting small
 differences.
 
+`run` stops early after 3 consecutive infrastructure failures (a crashed run,
+e.g. OpenAI unreachable, or a sandbox error while grading). Agent failures never
+stop it. The partial report is still written, marked incomplete, and the command
+exits 1.
+
 The sandbox is only reachable from the service container. The suite ships in
 the image at `/app/evals`, so run the evals there:
 
