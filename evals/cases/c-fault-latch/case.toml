@@ -1,0 +1,31 @@
+repo = "bms_c"
+title = "Voltage faults must latch until explicitly reset"
+body = """
+`cell_monitor_update()` clears the over- and undervoltage faults as soon as the voltage is back in
+range, so a cell that briefly exceeded its limit lets the contactor close again on the next cycle.
+Voltage faults must latch.
+
+## Acceptance criteria
+
+- `cell_monitor_update()` still sets `FAULT_CELL_OVERVOLTAGE` and `FAULT_CELL_UNDERVOLTAGE`, but never
+  clears them.
+- New `bms_status_t cell_monitor_reset_faults(void)` in `cell_monitor.h`. For each of the two voltage
+  faults that is active, it clears the fault only if its condition is absent from the last successful
+  measurement (it does not read the cells again). It returns `BMS_OK` if neither voltage fault is
+  active afterwards, and `BMS_ERR_STATE` otherwise; a fault whose condition is still present stays set.
+- `FAULT_SENSOR` keeps its current behaviour: it is cleared automatically by the next successful read.
+- Existing tests updated, new behaviour covered by unit tests.
+"""
+
+[expect]
+context = ["include/cell_monitor.h", "src/cell_monitor.c", "tests/test_cell_monitor.c", "include/fault.h"]
+changed = ["include/cell_monitor.h", "src/cell_monitor.c", "tests/test_cell_monitor.c"]
+unchanged = ["include/fault.h", "src/fault.c", "src/contactor.c", "include/hal.h", "CMakeLists.txt"]
+contains = [
+    { path = "include/cell_monitor.h", pattern = 'bms_status_t\s+cell_monitor_reset_faults\s*\(\s*void\s*\)' },
+]
+
+[[hidden_checks]]
+name = "acceptance"
+run = 'gcc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude -Itests src/*.c tests/hal_stub.c .autoforge-eval/acceptance.c -o "$TMPDIR/acceptance" && "$TMPDIR/acceptance"'
+timeout = 300

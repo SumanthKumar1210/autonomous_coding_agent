@@ -1,0 +1,36 @@
+repo = "bms_c"
+title = "Add overcurrent protection"
+body = """
+The pack must be disconnected when the current stays too high for too long.
+
+## Acceptance criteria
+
+- New module `overcurrent` (`include/overcurrent.h`, `src/overcurrent.c`), built and unit-tested like
+  every other module.
+- Constants `OVERCURRENT_LIMIT_MA` (150000, i.e. 150 A) and `OVERCURRENT_DEBOUNCE_MS` (100).
+- `void overcurrent_init(void)`: forget all state.
+- `bms_status_t overcurrent_update(void)`: reads the current with `hal_read_current_ma()` and the time
+  with `hal_time_ms()`. The limit applies to the magnitude, in both charge and discharge direction.
+  Once the magnitude has been above the limit continuously for at least `OVERCURRENT_DEBOUNCE_MS`
+  (measured from the first sample above the limit), set `FAULT_OVERCURRENT` and open the contactor
+  with `contactor_open()`. Any sample at or below the limit restarts the debounce.
+- The fault latches: `overcurrent_update()` never clears it.
+- `bms_status_t overcurrent_reset(void)`: if the last measured magnitude is at or below the limit,
+  clear `FAULT_OVERCURRENT` and return `BMS_OK`; otherwise keep the fault and return `BMS_ERR_STATE`.
+- `hal_time_ms()` wraps after about 49 days; the debounce must keep working across the wrap.
+- Every int32_t current must be handled, including the most negative value.
+"""
+
+[expect]
+context = ["include/hal.h", "include/fault.h", "include/contactor.h", "CMakeLists.txt"]
+changed = ["include/overcurrent.h", "src/overcurrent.c", "tests/test_overcurrent.c", "CMakeLists.txt"]
+unchanged = ["include/hal.h", "include/fault.h", "src/fault.c", "src/contactor.c", "src/cell_monitor.c"]
+contains = [
+    { path = "CMakeLists.txt", pattern = 'BMS_MODULES[^)]*overcurrent' },
+    { path = "CMakeLists.txt", pattern = 'src/overcurrent\.c' },
+]
+
+[[hidden_checks]]
+name = "acceptance"
+run = 'gcc -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude -Itests src/*.c tests/hal_stub.c .autoforge-eval/acceptance.c -o "$TMPDIR/acceptance" && "$TMPDIR/acceptance"'
+timeout = 300

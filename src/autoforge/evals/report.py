@@ -99,8 +99,11 @@ class Aggregate:
         seconds: Mean agent time per run.
         outcomes: Count of each outcome.
         false_rejects: Runs the reviewer rejected although the change was resolved.
-        false_accepts: Runs that completed (approved) although the change was not resolved.
+        false_accepts: Runs the reviewer approved (completed) although the change was not resolved.
         unverified: Runs whose checks could not run (no sandbox, sandbox error); they count as unresolved.
+
+    ``false_rejects`` and ``false_accepts`` judge the reviewer, so they only count runs in which a
+    reviewer gave a verdict, and are ``None`` for a variant without one (e.g. ``single``, ``no-review``).
     """
 
     runs: int
@@ -113,8 +116,8 @@ class Aggregate:
     output_tokens: float
     seconds: float
     outcomes: dict[str, int]
-    false_rejects: int
-    false_accepts: int
+    false_rejects: int | None
+    false_accepts: int | None
     unverified: int
 
 
@@ -167,6 +170,7 @@ def _aggregate(rows: list[RunRecord]) -> Aggregate:
     n = len(rows)
     hidden_total = sum(r.hidden_total for r in rows)
     recalls = [r.context_recall for r in rows if r.context_recall is not None]
+    reviewed = [r for r in rows if r.reviewer_model]  # a reviewer gave a verdict ("" without one)
     return Aggregate(
         runs=n,
         resolved_rate=sum(r.resolved for r in rows) / n,
@@ -178,9 +182,10 @@ def _aggregate(rows: list[RunRecord]) -> Aggregate:
         output_tokens=sum(r.output_tokens for r in rows) / n,
         seconds=sum(r.seconds for r in rows) / n,
         outcomes=dict(Counter(r.outcome for r in rows)),
-        false_rejects=sum(1 for r in rows if r.outcome == "review_rejected" and r.resolved),
-        false_accepts=sum(1 for r in rows if r.outcome == "completed" and r.has_change and not r.resolved
-                          and not r.checks_skipped),
+        false_rejects=sum(1 for r in reviewed if r.outcome == "review_rejected" and r.resolved)
+        if reviewed else None,
+        false_accepts=sum(1 for r in reviewed if r.outcome == "completed" and r.has_change and not r.resolved
+                          and not r.checks_skipped) if reviewed else None,
         unverified=sum(1 for r in rows if r.has_change and r.checks_skipped and not r.policy_error),
     )
 
@@ -202,8 +207,8 @@ def markdown_summary(meta: dict[str, Any], records: list[RunRecord]) -> str:
     for name, a in aggs.items():
         lines.append(f"| {name} | {a.runs} | {_pct(a.resolved_rate)} | {_pct(a.scope_rate)} | "
                      f"{_pct(a.hidden_pass_rate)} | {_pct(a.context_recall)} | {a.attempts:.1f} | "
-                     f"{a.input_tokens:,.0f} / {a.output_tokens:,.0f} | {a.seconds:.0f} s | {a.false_accepts} | "
-                     f"{a.false_rejects} | {a.unverified} |")
+                     f"{a.input_tokens:,.0f} / {a.output_tokens:,.0f} | {a.seconds:.0f} s | "
+                     f"{_count(a.false_accepts)} | {_count(a.false_rejects)} | {a.unverified} |")
     if "full" in aggs and "no-review" in aggs:
         lift = aggs["full"].resolved_rate - aggs["no-review"].resolved_rate
         cost = aggs["full"].input_tokens + aggs["full"].output_tokens
@@ -276,6 +281,10 @@ def _case_note(rows: list[RunRecord]) -> str:
     if last.failed_checks:
         return f"({last.outcome}, {len(last.failed_checks)} check(s) failed)"
     return f"({last.outcome})"
+
+
+def _count(value: int | None) -> str:
+    return "–" if value is None else str(value)
 
 
 def _pct(value: float) -> str:

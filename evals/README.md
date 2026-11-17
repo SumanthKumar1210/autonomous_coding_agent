@@ -31,6 +31,15 @@ evals/
 | `c-pyro-fuse` | C | new module | New header/source, HAL function, HAL stub, CMake registration, unit test; never-retry safety rule |
 | `py-parser-robust` | Python | bug fix | Header/comment/blank handling, 1-based line numbers, consistent cell count |
 | `py-energy` | Python | feature across 2 modules | Trapezoidal integration with units, report line; existing report test must be updated |
+| `c-overcurrent-protection` | C | new module, safety logic | Debounce boundary (≥ 100 ms), charge *and* discharge incl. `INT32_MIN`, restart at the limit, latch, conditional reset, contactor opening, `hal_time_ms()` wrap |
+| `c-fault-latch` | C | behaviour change | Faults latch; reset clears only faults whose condition is gone (from the last measurement, no new read); `FAULT_SENSOR` still self-clears |
+| `py-time-weighted-current` | Python | bug fix | Trapezoidal time weighting, single sample, non-increasing timestamps raise, renamed report line |
+
+The last three are **reviewer cases**: most of their acceptance criteria are
+covered by no repository test, only by the hidden tests. A change can pass
+every check the coder gets feedback from and still miss a criterion. Only a
+reviewer that reads the criteria catches that, so these cases are where
+reviewer lift (`full` − `no-review`) can show.
 
 The fixtures are frozen. Change them only together with the cases, and re-run
 `validate` afterwards.
@@ -46,8 +55,8 @@ All graders are deterministic. No LLM judges another LLM.
 | Hidden checks | Share of hidden acceptance checks passed |
 | Context recall | Share of `expect.context` files the context retrieval showed the agents |
 | Attempts, tokens, time | Cost per run (mean) |
-| False accepts | Runs that ended approved (published) with an unresolved change |
-| False rejects | Runs the reviewer rejected although the change was resolved |
+| False accepts | Runs the reviewer approved although the change was unresolved (`–` for variants without a reviewer) |
+| False rejects | Runs the reviewer rejected although the change was resolved (`–` without a reviewer) |
 | Unverified | Runs whose checks could not run (no sandbox); they never count as resolved |
 
 ## Variants

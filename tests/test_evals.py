@@ -76,8 +76,8 @@ def _solution_coder(case: EvalCase) -> FakeCoder:
 
 def test_real_suite_loads() -> None:
     cases = load_suite(SUITE)
-    assert {c.id for c in cases} >= {"c-cell-imbalance", "c-pyro-fuse", "c-soc-clamp", "py-energy",
-                                     "py-parser-robust"}
+    assert {c.id for c in cases} >= {"c-cell-imbalance", "c-fault-latch", "c-overcurrent-protection", "c-pyro-fuse",
+                                     "c-soc-clamp", "py-energy", "py-parser-robust", "py-time-weighted-current"}
     assert {c.repo for c in cases} == {"bms_c", "bms_py"}
     for case in cases:
         assert case.hidden_checks and all(c.name.startswith(HIDDEN_CHECK_PREFIX) for c in case.hidden_checks)
@@ -364,10 +364,19 @@ def test_report_round_trip_aggregate_and_markdown(tmp_path: Path) -> None:
 
     aggs = aggregate(loaded)
     assert aggs["full"].resolved_rate == 1.0 and aggs["no-review"].resolved_rate == 0.0
-    assert aggs["no-review"].false_accepts == 1  # approved (no reviewer) but wrong
+    assert aggs["no-review"].false_accepts is None  # no reviewer, so nothing to judge
     text = markdown_summary(meta, loaded)
+    assert "| no-review | 1 | 0% |" in text and "| – | – | 0 |" in text
     assert "**Reviewer lift** (full − no-review): +100 pp resolved, +200 tokens per run." in text
     assert "| c | 0/1 (completed, 1 check(s) failed) | 1/1  |" in text
+
+
+def test_false_accepts_count_only_reviewed_runs() -> None:
+    rows = [_record("full", False, reviewer_model="m"),  # reviewer approved a wrong change
+            _record("full", True, reviewer_model="m"),
+            _record("full", False, outcome="checks_failed")]  # never reached the reviewer
+    agg = aggregate(rows)["full"]
+    assert agg.false_accepts == 1 and agg.false_rejects == 0
 
 
 def test_compare_reports_deltas() -> None:

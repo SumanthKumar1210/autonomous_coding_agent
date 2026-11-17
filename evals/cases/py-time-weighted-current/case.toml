@@ -1,0 +1,27 @@
+repo = "bms_py"
+title = "Average current is wrong for logs with irregular sampling"
+body = """
+The logger samples faster during load changes, so `average_current_ma` (a plain mean of the samples)
+over-weights the busy periods and the report shows the wrong average current.
+
+## Acceptance criteria
+
+- `average_current_ma` returns the time-weighted mean: integrate the current over time with the
+  trapezoidal rule and divide by the duration. Keep its name and signature.
+- A single sample returns its own current. Empty input still raises `ValueError`, and so do samples
+  whose timestamps do not strictly increase.
+- The report line is renamed to `Average current (time-weighted): <value> mA` (format otherwise
+  unchanged).
+- Tests for both.
+"""
+
+[expect]
+context = ["bmstools/stats.py", "bmstools/report.py", "tests/test_stats.py", "tests/test_report.py"]
+changed = ["bmstools/stats.py", "bmstools/report.py", "tests/test_stats.py", "tests/test_report.py"]
+unchanged = ["bmstools/log_parser.py", "pyproject.toml"]
+contains = []
+
+[[hidden_checks]]
+name = "acceptance"
+run = "python -m pytest -q -p no:cacheprovider .autoforge-eval"
+timeout = 300
